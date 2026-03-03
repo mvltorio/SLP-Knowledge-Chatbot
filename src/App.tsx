@@ -545,6 +545,16 @@ const handleConnectDrive = () => {
                         apiKey: customApiKey
                     })
                 });
+                // 🔁 Upload to Google Drive
+                 await fetch('/api/drive/upload', {
+                 method: 'POST',
+                 headers: { 'Content-Type': 'application/json' },
+                 body: JSON.stringify({
+                 name: file.name,
+                 content: content,
+                 type: file.type
+                    })
+                });
                 
                 // Small delay between any file to avoid overwhelming the server/DB
                 await new Promise(r => setTimeout(r, 100));
