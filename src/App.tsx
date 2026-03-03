@@ -74,6 +74,22 @@ export default function App() {
   const [newUserPassword, setNewUserPassword] = useState('');
   const [newUserRole, setNewUserRole] = useState<'user' | 'admin'>('user');
   const [editingAdminUser, setEditingAdminUser] = useState<any>(null);
+/////////////////////////////////////////////////////
+// 🔐 AUTO RESTORE LOGIN SESSION (ADD THIS HERE)
+/////////////////////////////////////////////////////
+
+useEffect(() => {
+  const savedUser = localStorage.getItem('slp_user');
+  if (savedUser) {
+    try {
+      const parsed = JSON.parse(savedUser);
+      setUser(parsed);
+      setView(parsed.role === 'admin' ? 'admin' : 'chat');
+    } catch {
+      localStorage.removeItem('slp_user');
+    }
+  }
+}, []);
 
   // Cooldown timer effect
   useEffect(() => {
@@ -94,25 +110,38 @@ export default function App() {
 
   // Auth Handlers
   const handleLogin = async (e: FormEvent) => {
-    e.preventDefault();
-    setAuthMessage('');
-    try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: authEmail, password: authPassword })
-      });
-      const data = await res.json();
-      if (data.success) {
-        setUser(data.user);
-        setView('chat');
+  e.preventDefault();
+  setAuthMessage('');
+
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: authEmail, password: authPassword })
+    });
+
+    const data = await res.json();
+
+    if (data.success && data.user) {
+      setUser(data.user);
+
+      // ✅ Save session
+      localStorage.setItem('slp_user', JSON.stringify(data.user));
+
+      // ✅ Redirect based on role
+      if (data.user.role === 'admin') {
+        setView('admin');
       } else {
-        setAuthMessage(data.message);
+        setView('chat');
       }
-    } catch (e) {
-      setAuthMessage('Connection error.');
+    } else {
+      setAuthMessage(data.message || 'Login failed.');
     }
-  };
+  } catch (error) {
+    console.error('Login error:', error);
+    setAuthMessage('Connection error.');
+  }
+};
 
   const handleClearChat = () => {
     if (window.confirm('Clear all messages? This will also reset your token usage.')) {
