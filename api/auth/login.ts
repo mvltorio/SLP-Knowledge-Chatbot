@@ -26,10 +26,12 @@ export default async function handler(req: any, res: any) {
     }
 
     return res.status(200).json({
-      success: true,
-      user: data.user,
-      session: data.session,
-    });
+    success: true,
+    user: {
+    email: user.email,
+    role: 'admin'   // 👈 add this line only
+   }
+   });
 
   } catch (err: any) {
     return res.status(500).json({
