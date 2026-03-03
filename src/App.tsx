@@ -388,7 +388,7 @@ export default function App() {
         }
     };
     checkApiKey();
-    checkDriveStatus();
+    // checkDriveStatus();  // TEMP DISABLED
     checkDbHealth();
     cleanupFiles();
   }, []);
