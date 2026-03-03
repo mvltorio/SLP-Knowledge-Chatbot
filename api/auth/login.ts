@@ -18,18 +18,18 @@ export default async function handler(req: any, res: any) {
       password,
     });
 
-    if (error) {
+    if (error || !data.user) {
       return res.status(400).json({
         success: false,
-        message: error.message,
+        message: error?.message || "Invalid login",
       });
     }
 
     return res.status(200).json({
       success: true,
       user: {
-        email: data.user?.email,
-        role: "admin", // 👈 force admin
+        email: data.user.email,
+        role: data.user.user_metadata?.role || "user",
       },
     });
 
