@@ -7,27 +7,49 @@ export default async function handler(req: any, res: any) {
 
   const supabase = createClient(
     process.env.SUPABASE_URL!,
-    process.env.SUPABASE_ANON_KEY!
+    process.env.SUPABASE_SERVICE_ROLE_KEY! // IMPORTANT: service role
   );
 
   try {
     const { email, password } = req.body;
 
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-    });
+    // 1️⃣ Create user in Supabase Auth
+    const { data: authData, error: authError } =
+      await supabase.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+      });
 
-    if (error) {
+    if (authError) {
       return res.status(400).json({
         success: false,
-        message: error.message,
+        message: authError.message,
+      });
+    }
+
+    // 2️⃣ Insert into users table with pending status
+    const { error: insertError } = await supabase
+      .from("users")
+      .insert([
+        {
+          id: authData.user.id,
+          email,
+          role: "user",
+          status: "pending",
+        },
+      ]);
+
+    if (insertError) {
+      return res.status(500).json({
+        success: false,
+        message: insertError.message,
       });
     }
 
     return res.status(200).json({
       success: true,
-      message: "User registered successfully",
+      message: "Registration successful. Waiting for admin approval.",
     });
 
   } catch (err: any) {
