@@ -924,8 +924,15 @@ useEffect(() => {
                   </button>
                 </>
               )}
-              <button onClick={() => { setUser(null); setView('login'); }} className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition" title="Logout">
-                <LogOut className="w-5 h-5" />
+              <button   onClick={() => {
+    localStorage.removeItem('slp_user');
+    setUser(null);
+    setView('login');
+  }}
+  className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition"
+  title="Logout"
+>
+  <LogOut className="w-5 h-5" />
               </button>
             </div>
           </div>

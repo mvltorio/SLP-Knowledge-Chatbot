@@ -2,7 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {
-    return res.status(405).json({ message: "Method not allowed" });
+    return res.status(405).json({ success: false, message: "Method not allowed" });
   }
 
   const supabase = createClient(
@@ -13,30 +13,38 @@ export default async function handler(req: any, res: any) {
   try {
     const { email, password } = req.body;
 
-    // 1️⃣ Authenticate with Supabase Auth
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (error || !data.user) {
+    if (!email || !password) {
       return res.status(400).json({
         success: false,
-        message: error?.message || "Invalid login credentials.",
+        message: "Email and password are required.",
       });
     }
 
-    // 2️⃣ Check user approval status in users table
+    // 1️⃣ Authenticate with Supabase Auth
+    const { data: authData, error: authError } =
+      await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+    if (authError || !authData.user) {
+      return res.status(400).json({
+        success: false,
+        message: authError?.message || "Invalid login credentials.",
+      });
+    }
+
+    // 2️⃣ Check user approval in custom users table
     const { data: userData, error: userError } = await supabase
       .from("users")
-      .select("*")
-      .eq("id", data.user.id)
+      .select("id, email, role, status")
+      .eq("id", authData.user.id)
       .single();
 
     if (userError || !userData) {
-      return res.status(400).json({
+      return res.status(404).json({
         success: false,
-        message: "User record not found.",
+        message: "User record not found. Please contact administrator.",
       });
     }
 
@@ -48,7 +56,7 @@ export default async function handler(req: any, res: any) {
       });
     }
 
-    // 4️⃣ Allow login
+    // 4️⃣ Success
     return res.status(200).json({
       success: true,
       user: {
@@ -60,7 +68,7 @@ export default async function handler(req: any, res: any) {
   } catch (err: any) {
     return res.status(500).json({
       success: false,
-      message: err.message,
+      message: err.message || "Internal server error.",
     });
   }
 }
