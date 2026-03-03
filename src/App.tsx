@@ -168,14 +168,14 @@ useEffect(() => {
   };
 
   const fetchAdminUsers = async () => {
-    const res = await fetch('/api/auth/users');
+    const res = await fetch('/api/admin/users');
     const data = await res.json();
     setAdminUsers(data);
   };
 
   const approveUser = async (userId: number, role: string) => {
     try {
-      const res = await fetch('/api/admin/approve', {
+      const res = await fetch('/api/admin/update-role', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, role })
