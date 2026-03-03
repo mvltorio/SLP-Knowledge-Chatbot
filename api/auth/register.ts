@@ -14,48 +14,43 @@ export default async function handler(req: any, res: any) {
     const { email, password } = req.body;
 
     // 1️⃣ Create user in Supabase Auth
-    const { data: authData, error: authError } =
-      await supabase.auth.admin.createUser({
-        email,
-        password,
-        email_confirm: true,
-      });
+    const { data, error: authError } = await supabase.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true
+    });
 
-    if (authError) {
+    if (authError || !data.user) {
       return res.status(400).json({
         success: false,
-        message: authError.message,
+        message: authError?.message || "Registration failed"
       });
     }
 
-    // 2️⃣ Insert into users table with pending status
-    const { error: insertError } = await supabase
-      .from("users")
-      .insert([
-        {
-          id: authData.user.id,
-          email,
-          role: "user",
-          status: "pending",
-        },
-      ]);
+    // 2️⃣ Insert into users table with PENDING status
+    const { error: insertError } = await supabase.from("users").insert({
+      id: data.user.id,
+      email,
+      role: "user",
+      status: "pending"
+    });
 
     if (insertError) {
-      return res.status(500).json({
+      return res.status(400).json({
         success: false,
-        message: insertError.message,
+        message: insertError.message
       });
     }
 
     return res.status(200).json({
       success: true,
-      message: "Registration successful. Waiting for admin approval.",
+      message: "Registration successful. Waiting for admin approval."
     });
 
   } catch (err: any) {
     return res.status(500).json({
       success: false,
-      message: err.message,
+      message: err.message
     });
   }
 }
