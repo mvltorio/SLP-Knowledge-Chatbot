@@ -373,7 +373,7 @@ export default function App() {
     };
     const checkDbHealth = async () => {
         try {
-            const res = await fetch('/api/db/health');
+            const res = await fetch('/api/health');
             const data = await res.json();
             setDbStatus(data);
         } catch (e) {
