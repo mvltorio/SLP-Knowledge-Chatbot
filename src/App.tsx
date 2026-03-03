@@ -84,7 +84,7 @@ useEffect(() => {
     try {
       const parsed = JSON.parse(savedUser);
       setUser(parsed);
-      setView(parsed.role === 'admin' ? 'admin' : 'chat');
+      setView('chat');
     } catch {
       localStorage.removeItem('slp_user');
     }
@@ -130,7 +130,7 @@ useEffect(() => {
 
       // ✅ Redirect based on role
       if (data.user.role === 'admin') {
-        setView('admin');
+        setView('chat');
       } else {
         setView('chat');
       }
