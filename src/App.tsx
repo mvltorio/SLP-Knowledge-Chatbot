@@ -382,7 +382,7 @@ export default function App() {
     };
     const cleanupFiles = async () => {
         try {
-            await fetch('/api/files/cleanup', { method: 'POST' });
+            await fetch('/api/cleanup', { method: 'POST' });
         } catch (e) {
             console.error('Cleanup failed:', e);
         }
@@ -554,7 +554,7 @@ export default function App() {
     setIsLoading(true);
     
     // Trigger cleanup on message send as well
-    fetch('/api/files/cleanup', { method: 'POST' }).catch(() => {});
+    fetch('/api/cleanup', { method: 'POST' }).catch(() => {});
 
     const isQuotaError = (err: any) => {
       const errStr = JSON.stringify(err).toUpperCase();
