@@ -286,7 +286,7 @@ const handleConnectDrive = () => {
   const handleSyncDrive = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch(`/api/drive/sync?apiKey=${encodeURIComponent(customApiKey)}`);
+      const res = await fetch(`/api/drive/sync`);
       const data = await res.json();
       if (data.success) {
         alert(`Sync complete! Found ${data.newFilesCount} new files from Google Drive.`);
