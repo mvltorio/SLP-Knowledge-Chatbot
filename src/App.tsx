@@ -168,7 +168,7 @@ useEffect(() => {
   };
 
   const fetchAdminUsers = async () => {
-    const res = await fetch('/api/admin/users');
+    const res = await fetch('/api/auth/users');
     const data = await res.json();
     setAdminUsers(data);
   };
@@ -194,7 +194,7 @@ useEffect(() => {
   const handleAddUser = async (e: FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch('/api/admin/users/add', {
+      const res = await fetch('/api/admin/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: newUserEmail, password: newUserPassword, role: newUserRole })
@@ -217,7 +217,7 @@ useEffect(() => {
     e.preventDefault();
     if (!editingAdminUser) return;
     try {
-      const res = await fetch('/api/admin/users/update', {
+      const res = await fetch('/api/admin/update-role', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: editingAdminUser.id, role: editingAdminUser.role })
@@ -237,7 +237,7 @@ useEffect(() => {
   const rejectUser = async (userId: number) => {
     if (window.confirm('Are you sure you want to reject/delete this user?')) {
       try {
-        const res = await fetch('/api/admin/reject', {
+        const res = await fetch('/api/admin/delete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ userId })
