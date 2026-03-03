@@ -25,7 +25,7 @@ export default async function handler(req: any, res: any) {
 
     const ADMIN_EMAIL = "mvltorio@dswd.gov.ph".toLowerCase();
 
-    const users = data.users.map((u) => ({
+    const users = data.users.map((u) => ({ 
       id: u.id,
       email: u.email,
       role: u.email?.toLowerCase() === ADMIN_EMAIL ? "admin" : "user",
