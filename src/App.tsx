@@ -276,16 +276,12 @@ useEffect(() => {
     fetchKnowledgeBase();
   };
 
-  const handleConnectDrive = async () => {
-    try {
-      const res = await fetch(`/api/auth/google/url?origin=${encodeURIComponent(window.location.origin)}`);
-      const { url } = await res.json();
-      const authWindow = window.open(url, 'google_oauth', 'width=600,height=700');
-      if (!authWindow) alert('Please allow popups for Google Drive connection.');
-    } catch (e) {
-      console.error('Drive connection error:', e);
-    }
-  };
+const handleConnectDrive = () => {
+  window.open(
+    "https://drive.google.com/drive/folders/1gD2-yPxfUVazMp3jycUxBnHvLtGt7jy_",
+    "_blank"
+  );
+};
 
   const handleSyncDrive = async () => {
     setIsLoading(true);
