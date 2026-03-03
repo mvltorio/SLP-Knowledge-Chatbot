@@ -14,10 +14,10 @@ export default async function handler(req: any, res: any) {
     }
 
     const users = data.users.map((u) => ({
-      id: u.id,
-      email: u.email,
-      role: "user"
-    }));
+  id: u.id,
+  email: u.email,
+  role: u.email === "mvltorio@dswd.gov.ph" ? "admin" : "user"
+  }));
 
     return res.status(200).json(users);
 
