@@ -898,12 +898,11 @@ const handleConnectDrive = () => {
                     <FolderOpen className="w-5 h-5" />
                   </button>
                   <button 
-                    onClick={handleSyncDrive} 
-                    className={`p-2 rounded-lg transition ${isDriveConnected ? 'text-emerald-600 hover:bg-emerald-100' : 'text-gray-300 cursor-not-allowed'}`}
+                    onClick={handleSyncDrive}
+                    className="p-2 rounded-lg transition text-emerald-600 hover:bg-emerald-100"
                     title="Sync from Google Drive"
-                    disabled={!isDriveConnected && !isLoading}
                   >
-                    <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
+                  <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
                   </button>
                   <button 
                     onClick={handleSelectApiKey}
