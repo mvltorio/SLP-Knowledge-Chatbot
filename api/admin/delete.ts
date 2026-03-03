@@ -7,15 +7,24 @@ export default async function handler(req: any, res: any) {
 
   const { userId } = req.body;
 
+  if (!userId) {
+    return res.status(400).json({ message: "Missing userId" });
+  }
+
   const supabase = createClient(
     process.env.SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
   try {
-    const { error } = await supabase.auth.admin.deleteUser(userId);
+    const { error } = await supabase
+      .from("users")
+      .delete()
+      .eq("id", userId);
 
-    if (error) return res.status(400).json({ message: error.message });
+    if (error) {
+      return res.status(400).json({ message: error.message });
+    }
 
     return res.status(200).json({ success: true });
   } catch (err: any) {
