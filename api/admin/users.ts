@@ -15,19 +15,15 @@ export default async function handler(req: any, res: any) {
   );
 
   try {
-    const { data, error } = await supabase.auth.admin.listUsers();
+    const { data, error } = await supabase
+      .from("users")
+      .select("id, email, role, status");
 
     if (error) {
       return res.status(400).json({ message: error.message });
     }
 
-    const users = data.users.map((u) => ({
-      id: u.id,
-      email: u.email,
-      role: u.user_metadata?.role || "user",
-    }));
-
-    return res.status(200).json(users);
+    return res.status(200).json(data);
   } catch (err: any) {
     return res.status(500).json({ message: err.message });
   }
