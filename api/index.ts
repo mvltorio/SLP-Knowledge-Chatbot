@@ -8,12 +8,12 @@ export default async function handler(req: any, res: any) {
 
   try {
     // ✅ Test route
-    if (req.method === "GET" && req.url === "/api/test") {
+    if (req.method === "GET" && req.url?.includes("/api/test")) {
       return res.status(200).json({ message: "Backend is working 🚀" });
     }
 
-    // ✅ Login route
-    if (req.method === "POST" && req.url === "/api/login") {
+    // ✅ Login route (matches your frontend)
+    if (req.method === "POST" && req.url?.includes("/api/auth/login")) {
       const { email, password } = req.body;
 
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -21,13 +21,25 @@ export default async function handler(req: any, res: any) {
         password,
       });
 
-      if (error) throw error;
+      if (error) {
+        return res.status(400).json({
+          success: false,
+          message: error.message,
+        });
+      }
 
-      return res.status(200).json({ user: data.user });
+      return res.status(200).json({
+        success: true,
+        user: data.user,
+      });
     }
 
-    return res.status(404).json({ error: "Route not found" });
+    return res.status(404).json({ message: "Route not found" });
+
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
   }
 }
