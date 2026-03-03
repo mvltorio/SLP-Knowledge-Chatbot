@@ -1,6 +1,6 @@
 import { google } from "googleapis";
 
-const FOLDER_ID = "1gD2-yPxfUVazMp3jycUxBnHvLtGt7jy_";
+const FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID!;
 
 export default async function handler(req: any, res: any) {
   try {
