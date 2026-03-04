@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient } from '@supabase/supabase-js'
 import { GoogleGenAI } from "@google/genai"
 
@@ -24,7 +24,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       contents: query
     })
 
-    const embedding = embeddingResponse.embedding.values
+    const embedding = (embeddingResponse as any).embedding.values
 
     // Search similar documents
     const { data, error } = await supabase.rpc("match_documents", {
