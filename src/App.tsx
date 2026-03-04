@@ -1,5 +1,5 @@
 import { useState, FormEvent, ChangeEvent, useEffect } from 'react';
-import { Paperclip, Send, File, X, LoaderCircle, LogOut, Users, CheckCircle, FolderOpen, ChevronRight, Edit3, Download, Key, RefreshCw, Leaf, Plus, UserPlus, HelpCircle } from 'lucide-react';
+import { Paperclip, Send, File, X, LoaderCircle, LogOut, Users, CheckCircle, FolderOpen, ChevronRight, Edit3, Download, Leaf, Plus, UserPlus, HelpCircle } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { generateContent, KnowledgeDocument, analyzeImage, validateApiKey } from './services/geminiService';
@@ -60,7 +60,6 @@ export default function App() {
   const [isValidatingKey, setIsValidatingKey] = useState(false);
   const [keyValidationError, setKeyValidationError] = useState<string | null>(null);
   const [dbStatus, setDbStatus] = useState<{status: 'ok' | 'error' | 'loading', message?: string, hint?: string}>({status: 'loading'});
-  const [hasApiKey, setHasApiKey] = useState(false);
   const [customApiKey, setCustomApiKey] = useState(() => localStorage.getItem('gemini_custom_key') || '');
   const [isKeySaved, setIsKeySaved] = useState(false);
   const [keyStatus, setKeyStatus] = useState<'idle' | 'validating' | 'valid' | 'invalid'>(() => 
@@ -338,18 +337,6 @@ const handleConnectDrive = () => {
       setIsValidatingKey(false);
     }
   };
-
-  const handleSelectApiKey = async () => {
-    try {
-      if ((window as any).aistudio) {
-        await (window as any).aistudio.openSelectKey();
-        setHasApiKey(true);
-      }
-    } catch (e) {
-      console.error('Error opening key selector:', e);
-    }
-  };
-
   const handleSaveKey = async () => {
     if (!customApiKey.trim()) {
       handleClearKey();
@@ -890,27 +877,7 @@ const handleConnectDrive = () => {
             <div className="flex gap-2">
               {user?.role === 'admin' && (
                 <>
-                  <button 
-                    onClick={handleConnectDrive} 
-                    className={`p-2 rounded-lg transition ${isDriveConnected ? 'text-blue-600 bg-blue-50' : 'text-gray-400 hover:bg-emerald-100'}`}
-                    title={isDriveConnected ? "Google Drive Connected" : "Connect Google Drive"}
-                  >
-                    <FolderOpen className="w-5 h-5" />
-                  </button>
-                  <button 
-                    onClick={handleSyncDrive}
-                    className="p-2 rounded-lg transition text-emerald-600 hover:bg-emerald-100"
-                    title="Sync from Google Drive"
-                  >
-                  <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
-                  </button>
-                  <button 
-                    onClick={handleSelectApiKey}
-                    className={`p-2 rounded-lg transition ${hasApiKey ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400 hover:bg-emerald-100'}`}
-                    title="Select API Key"
-                  >
-                    <Key className="w-5 h-5" />
-                  </button>
+                  
                   <button onClick={() => setView('admin')} className="p-2 text-emerald-600 hover:bg-emerald-100 rounded-lg transition" title="Admin Panel">
                     <Users className="w-5 h-5" />
                   </button>
