@@ -1,7 +1,7 @@
 import pdfExtractor from "./pdfExtractor"
-import docxExtractor from "./docxExtractor"
-import excelExtractor from "./excelExtractor"
-import csvExtractor from "./csvExtractor"
+import docxExtractor from "../../lib/test/docxExtractor"
+import excelExtractor from "../../lib/test/excelExtractor"
+import csvExtractor from "../../lib/test/csvExtractor"
 import pptxExtractor from "./pptxExtractor"
 import imageOCR from "./imageOCR"
 
