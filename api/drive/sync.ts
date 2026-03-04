@@ -17,7 +17,7 @@ const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY!
 })
 
-function chunkText(text: string, size = 1000) {
+function chunkText(text: string, size = 4000) {
   const chunks: string[] = []
 
   for (let i = 0; i < text.length; i += size) {
