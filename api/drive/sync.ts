@@ -1,8 +1,10 @@
+export const maxDuration = 60
+
 import { google } from "googleapis"
 import { createClient } from "@supabase/supabase-js"
 import { GoogleGenAI } from "@google/genai"
 
-import extractText from "../../lib/extractors/extractText.js"
+import extractText from "../../lib/extractors/extractText"
 
 const FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID!
 
