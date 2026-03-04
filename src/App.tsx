@@ -285,97 +285,7 @@ const handleConnectDrive = () => {
   const handleSyncDrive = async () => {
   alert("Google Drive sync is disabled.");
    };
-    setIsLoading(true);
-    try {
-      const res = await fetch(`/api/drive/sync`);
-      const data = await res.json();
-      if (data.success) {
-        alert(`Sync complete! Found ${data.newFilesCount} new files from Google Drive.`);
-        fetchKnowledgeBase();
-      } else {
-        alert(data.message || 'Sync failed. Please check if your Google Drive is connected.');
-      }
-    } catch (e) {
-      console.error('Sync error:', e);
-      alert('Failed to sync with Google Drive.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleFetchOAuthDebug = async () => {
-    try {
-      const res = await fetch(`/api/auth/google/debug?origin=${encodeURIComponent(window.location.origin)}`);
-      const data = await res.json();
-      setOAuthDebugInfo(data);
-      setShowOAuthDebug(true);
-    } catch (e) {
-      alert('Failed to fetch debug info.');
-    }
-  };
-
-  const handleValidateKey = async () => {
-    setIsValidatingKey(true);
-    setKeyValidationError(null);
-    try {
-      const res = await fetch('/api/auth/validate-key', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey: customApiKey })
-      });
-      const data = await res.json();
-      if (data.valid) {
-        alert('API Key is valid!');
-        setKeyStatus('valid');
-        localStorage.setItem('gemini_key_status', 'valid');
-      } else {
-        setKeyValidationError(data.message);
-        setKeyStatus('invalid');
-        localStorage.setItem('gemini_key_status', 'invalid');
-      }
-    } catch (e) {
-      setKeyValidationError('Connection error during validation.');
-    } finally {
-      setIsValidatingKey(false);
-    }
-  };
-  const handleSaveKey = async () => {
-    if (!customApiKey.trim()) {
-      handleClearKey();
-      return;
-    }
-    
-    setKeyStatus('validating');
-    const isValid = await validateApiKey(customApiKey);
-    
-    if (isValid) {
-      localStorage.setItem('gemini_custom_key', customApiKey);
-      localStorage.setItem('gemini_key_status', 'valid');
-      setKeyStatus('valid');
-      setIsKeySaved(true);
-      setQuotaError(false);
-      setTimeout(() => setIsKeySaved(false), 3000);
-    } else {
-      setKeyStatus('invalid');
-      localStorage.setItem('gemini_key_status', 'invalid');
-    }
-  };
-
-  const handleClearKey = () => {
-    setCustomApiKey('');
-    localStorage.removeItem('gemini_custom_key');
-    localStorage.removeItem('gemini_key_status');
-    setKeyStatus('idle');
-    setIsKeySaved(false);
-  };
-
   useEffect(() => {
-    const checkApiKey = async () => {
-        if ((window as any).aistudio) {
-            const hasKey = await (window as any).aistudio.hasSelectedApiKey();
-            setHasApiKey(hasKey);
-        }
-    };
     const checkDriveStatus = async () => {
         try {
             const res = await fetch('/api/drive/status');
@@ -401,7 +311,6 @@ const handleConnectDrive = () => {
             console.error('Cleanup failed:', e);
         }
     };
-    checkApiKey();
     // checkDriveStatus();  // TEMP DISABLED
     checkDbHealth();
     cleanupFiles();
