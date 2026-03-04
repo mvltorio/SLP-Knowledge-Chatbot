@@ -2,7 +2,7 @@ import { useState, FormEvent, ChangeEvent, useEffect } from 'react';
 import { Paperclip, Send, File, X, LoaderCircle, LogOut, Users, CheckCircle, FolderOpen, ChevronRight, Edit3, Download, Key, Leaf, Plus, UserPlus, HelpCircle } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { generateContent, KnowledgeDocument, analyzeImage, validateApiKey } from './services/geminiService';
+import { generateContent, KnowledgeDocument, analyzeImage } from './services/geminiService';
 import { Message } from './types';
 import Chart from './components/Chart';
 
@@ -284,6 +284,16 @@ const handleConnectDrive = () => {
 
   const handleSyncDrive = async () => {
   alert("Google Drive sync is disabled.");
+  const handleFetchOAuthDebug = async () => {
+  try {
+    const res = await fetch('/api/auth/google/debug');
+    const data = await res.json();
+    setOAuthDebugInfo(data);
+    setShowOAuthDebug(true);
+  } catch (err) {
+    alert("Failed to fetch OAuth debug info.");
+  }
+};
    };
   useEffect(() => {
     const checkDriveStatus = async () => {
