@@ -1,5 +1,5 @@
 import { useState, FormEvent, ChangeEvent, useEffect } from 'react';
-import { Paperclip, Send, File, X, LoaderCircle, LogOut, Users, CheckCircle, FolderOpen, ChevronRight, Edit3, Download, Leaf, Plus, UserPlus, HelpCircle } from 'lucide-react';
+import { Paperclip, Send, File, X, LoaderCircle, LogOut, Users, CheckCircle, FolderOpen, ChevronRight, Edit3, Download, Key, Leaf, Plus, UserPlus, HelpCircle } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { generateContent, KnowledgeDocument, analyzeImage, validateApiKey } from './services/geminiService';
@@ -283,6 +283,8 @@ const handleConnectDrive = () => {
 };
 
   const handleSyncDrive = async () => {
+  alert("Google Drive sync is disabled.");
+   };
     setIsLoading(true);
     try {
       const res = await fetch(`/api/drive/sync`);
@@ -532,16 +534,7 @@ const handleConnectDrive = () => {
                         apiKey: customApiKey
                     })
                 });
-                // 🔁 Upload to Google Drive
-                 await fetch('/api/drive/upload', {
-                 method: 'POST',
-                 headers: { 'Content-Type': 'application/json' },
-                 body: JSON.stringify({
-                 name: file.name,
-                 content: content,
-                 type: file.type
-                    })
-                });
+
                 
                 // Small delay between any file to avoid overwhelming the server/DB
                 await new Promise(r => setTimeout(r, 100));
