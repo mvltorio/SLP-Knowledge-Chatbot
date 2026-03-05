@@ -1,4 +1,4 @@
-import { supabase } from "../src/db";
+import { supabase } from "./db";
 
 export default async function handler(req: any, res: any) {
 
