@@ -1,37 +1,24 @@
-import { createClient } from "@supabase/supabase-js";
+import { supabase } from "../../src/db";
 
-export default async function handler(req, res) {
+export default async function handler(req:any,res:any){
 
-  try {
-
-    if (req.method !== "POST") {
-      return res.status(405).json({ error: "Method not allowed" });
-    }
-
-    const { userId, status } = req.body;
-
-    const supabase = createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY
-    );
-
-    const { data, error } = await supabase
-      .from("users")
-      .update({ status })
-      .eq("id", userId)
-      .select();
-
-    if (error) {
-      console.error("Supabase error:", error);
-      return res.status(500).json({ error: error.message });
-    }
-
-    return res.status(200).json(data);
-
-  } catch (err) {
-
-    console.error("Server error:", err);
-    return res.status(500).json({ error: "Server error" });
-
+  if(req.method !== "POST"){
+    return res.status(405).json({message:"Method not allowed"});
   }
+
+  const { userId, role, status } = req.body;
+
+  const { error } = await supabase
+    .from("users")
+    .update({
+      role,
+      status: status || "approved"
+    })
+    .eq("id", userId);
+
+  if(error){
+    return res.status(500).json({success:false,message:error.message});
+  }
+
+  return res.json({success:true});
 }

@@ -164,13 +164,17 @@ export default function App() {
   fetchAdminUsers();
 }, []);
 
-  const approveUser = async (userId: number, role: string) => {
-    try {
-      const res = await fetch('/api/admin/update-role', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, role })
-      });
+const approveUser = async (userId: number, role: string) => {
+  try {
+    const res = await fetch('/api/admin/update-role', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId,
+        role,
+        status: "approved"
+      })
+    });
       const data = await res.json();
       if (!data.success) {
         alert('Failed to approve user: ' + data.message);
