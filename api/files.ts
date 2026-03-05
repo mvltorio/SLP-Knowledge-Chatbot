@@ -2,26 +2,23 @@ import { supabase } from "../src/db";
 
 export default async function handler(req: any, res: any) {
 
-  if (req.method === "GET") {
-    try {
+  try {
+
+    if (req.method === "GET") {
 
       const { data, error } = await supabase
         .from("files")
-        .select("*")
-        .order("uploaded_at", { ascending: false });
+        .select("*");
 
-      if (error) throw error;
+      if (error) {
+        console.error("SUPABASE ERROR:", error);
+        return res.status(500).json(error);
+      }
 
       return res.status(200).json(data);
-
-    } catch (error) {
-      console.error(error);
-      return res.status(500).json({ message: "Failed to fetch files" });
     }
-  }
 
-  if (req.method === "POST") {
-    try {
+    if (req.method === "POST") {
 
       const { name, category, content, type } = req.body;
 
@@ -31,15 +28,24 @@ export default async function handler(req: any, res: any) {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error("SUPABASE INSERT ERROR:", error);
+        return res.status(500).json(error);
+      }
 
       return res.status(200).json(data);
-
-    } catch (error) {
-      console.error(error);
-      return res.status(500).json({ message: "Upload failed" });
     }
-  }
 
-  return res.status(405).json({ message: "Method not allowed" });
+    return res.status(405).json({ message: "Method not allowed" });
+
+  } catch (err: any) {
+
+    console.error("FILES API CRASH:", err);
+
+    return res.status(500).json({
+      message: "Server crashed",
+      error: err.message
+    });
+
+  }
 }
