@@ -4,9 +4,9 @@ import { supabase } from "./db";
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
 
-    // ===================================
+    // ===============================
     // GET FILES
-    // ===================================
+    // ===============================
     if (req.method === "GET") {
 
       const { data, error } = await supabase
@@ -15,35 +15,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .order("uploaded_at", { ascending: false });
 
       if (error) {
-        console.error("SUPABASE FETCH ERROR:", error);
-
-        return res.status(500).json({
-          message: "Failed to fetch files",
-          error: error.message
-        });
+        console.error("FETCH ERROR:", error);
+        return res.status(500).json({ error: error.message });
       }
 
       return res.status(200).json(data);
     }
 
-
-    // ===================================
-    // UPLOAD FILE (TEXT CONTENT)
-    // ===================================
+    // ===============================
+    // UPLOAD FILE
+    // ===============================
     if (req.method === "POST") {
 
-      if (!req.body) {
+      const body = typeof req.body === "string"
+        ? JSON.parse(req.body)
+        : req.body;
+
+      if (!body) {
         return res.status(400).json({
-          message: "Request body is empty"
+          message: "Empty request body"
         });
       }
 
-      const { name, category, content, type } = req.body;
+      const { name, category, content, type } = body;
 
       if (!name || !category || !content) {
         return res.status(400).json({
           message: "Missing required fields",
-          required: ["name", "category", "content"]
+          received: body
         });
       }
 
@@ -61,7 +60,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .single();
 
       if (error) {
-        console.error("SUPABASE INSERT ERROR:", error);
+        console.error("INSERT ERROR:", error);
 
         return res.status(500).json({
           message: "Upload failed",
@@ -72,13 +71,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json(data);
     }
 
-
-    // ===================================
+    // ===============================
     // DELETE FILE
-    // ===================================
+    // ===============================
     if (req.method === "DELETE") {
 
-      const { id } = req.query;
+      const id = req.query.id;
 
       if (!id) {
         return res.status(400).json({
@@ -92,26 +90,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .eq("id", id);
 
       if (error) {
-        console.error("SUPABASE DELETE ERROR:", error);
-
-        return res.status(500).json({
-          message: "Delete failed",
-          error: error.message
-        });
+        console.error("DELETE ERROR:", error);
+        return res.status(500).json({ error: error.message });
       }
 
-      return res.status(200).json({
-        success: true
-      });
+      return res.status(200).json({ success: true });
     }
 
-
-    // ===================================
+    // ===============================
     // UPDATE FILE
-    // ===================================
+    // ===============================
     if (req.method === "PUT") {
 
-      const { id } = req.query;
+      const id = req.query.id;
       const { name, category } = req.body;
 
       if (!id) {
@@ -122,30 +113,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const { data, error } = await supabase
         .from("files")
-        .update({
-          name,
-          category
-        })
+        .update({ name, category })
         .eq("id", id)
         .select()
         .single();
 
       if (error) {
-        console.error("SUPABASE UPDATE ERROR:", error);
-
-        return res.status(500).json({
-          message: "Update failed",
-          error: error.message
-        });
+        console.error("UPDATE ERROR:", error);
+        return res.status(500).json({ error: error.message });
       }
 
       return res.status(200).json(data);
     }
 
-
-    // ===================================
-    // METHOD NOT ALLOWED
-    // ===================================
     return res.status(405).json({
       message: "Method not allowed"
     });
@@ -156,7 +136,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     return res.status(500).json({
       message: "Server crashed",
-      error: err?.message || "Unknown error"
+      error: err?.message
     });
   }
 }
