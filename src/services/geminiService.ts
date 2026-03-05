@@ -2,7 +2,11 @@ import { GoogleGenAI, Part, Type } from "@google/genai";
 import { findRelevantDocs } from "../../lib/vectorSearch";
 import { ChartSpec } from "../types";
 
-const getApiKey = () => {
+const getApiKey = (customKey?: string) => {
+
+  if (customKey && customKey.length > 20) {
+    return customKey;
+  }
 
   const envKey = import.meta.env.VITE_GEMINI_API_KEY;
 
@@ -93,7 +97,7 @@ export async function validateApiKey(key: string): Promise<boolean> {
 }
 
 export async function analyzeImage(file: File, customKey?: string): Promise<string> {
-  const apiKey = getApiKey();
+  const apiKey = getApiKey(customKey);
   if (!apiKey) throw new Error("Gemini API Key is missing. Please configure it in the sidebar.");
 
   const ai = new GoogleGenAI({ apiKey });
@@ -119,7 +123,7 @@ export async function generateContent(
   chatHistory: any[] = []
 ): Promise<{ text: string; chart?: ChartSpec; fileDownload?: any }> {
 
-  const apiKey = getApiKey();
+  const apiKey = getApiKey(customKey);
   if (!apiKey) {
     throw new Error("Gemini API Key is missing. Please configure it in the sidebar.");
   }
