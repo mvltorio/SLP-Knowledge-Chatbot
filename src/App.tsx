@@ -226,24 +226,28 @@ export default function App() {
   };
 
   const rejectUser = async (userId: number) => {
-    if (window.confirm('Are you sure you want to reject/delete this user?')) {
-      try {
-        const res = await fetch('/api/admin/delete', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId })
-        });
-        const data = await res.json();
-        if (!data.success) {
-          alert('Failed to reject user: ' + data.message);
-        }
-        fetchAdminUsers();
-      } catch (e) {
-        console.error('Rejection error:', e);
-        alert('Connection error while rejecting user.');
+  if (window.confirm('Are you sure you want to reject/delete this user?')) {
+    try {
+      const res = await fetch('/api/admin/delete-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId })
+      });
+
+      const data = await res.json();
+
+      if (!data.success) {
+        alert('Failed to reject user: ' + data.message);
       }
+
+      fetchAdminUsers();
+
+    } catch (e) {
+      console.error('Rejection error:', e);
+      alert('Connection error while rejecting user.');
     }
-  };
+  }
+};
 
   const fetchKnowledgeBase = async () => {
     const res = await fetch('/api/files');
