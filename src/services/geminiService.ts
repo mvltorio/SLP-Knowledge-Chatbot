@@ -3,10 +3,11 @@ import { findRelevantDocs } from "../../lib/vectorSearch";
 import { ChartSpec } from "../types";
 
 const getApiKey = (customKey?: string) => {
-  const key = (customKey && typeof customKey === 'string' && customKey.trim() !== '' && customKey !== 'undefined' && customKey !== 'null')
-    ? customKey.trim()
-    : process.env.GEMINI_API_KEY;
-  return key?.trim();
+  if (!customKey || customKey.trim() === "") {
+    throw new Error("Please paste your Gemini API key in the sidebar.");
+  }
+
+  return customKey.trim();
 };
 
 const chartSchema = {
