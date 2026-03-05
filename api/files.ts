@@ -1,14 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { supabase } from "./db";
 
-export const config = {
-  api: {
-    bodyParser: true
-  }
-};
-
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-
   try {
 
     // =====================
@@ -65,9 +58,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { id } = req.query;
 
       if (!id) {
-        return res.status(400).json({
-          error: "Missing id"
-        });
+        return res.status(400).json({ error: "Missing id" });
       }
 
       const { error } = await supabase
@@ -89,9 +80,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { name, category } = req.body;
 
       if (!id) {
-        return res.status(400).json({
-          error: "Missing id"
-        });
+        return res.status(400).json({ error: "Missing id" });
       }
 
       const { data, error } = await supabase
@@ -108,12 +97,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     return res.status(405).json({ error: "Method not allowed" });
 
-  } catch (error: any) {
+  } catch (err: any) {
 
-    console.error("FILES API ERROR:", error);
+    console.error("FILES API ERROR:", err);
 
     return res.status(500).json({
-      error: error.message || "Server error"
+      error: err.message || "Server error"
     });
   }
 }
