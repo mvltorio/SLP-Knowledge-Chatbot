@@ -170,7 +170,7 @@ export async function generateContent(
 Document: ${doc.name}
 Category: ${doc.category}
 
-${doc.content.slice(0,2000)}
+${doc.content.slice(0,800)}
 `)
   .join("\n\n---\n\n");
 
@@ -229,7 +229,7 @@ Answer clearly and professionally.
   try {
 
 const response = await ai.models.generateContent({
-  model: 'gemini-2.0-flash',
+  model: 'gemini-3-flash-preview',
   contents: contents,
   config: {
     responseMimeType: 'application/json',
