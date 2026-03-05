@@ -259,10 +259,28 @@ const approveUser = async (userId: number, role: string) => {
     setKnowledgeBase(data);
   };
 
-  const deleteFile = async (id: number) => {
-    await fetch(`/api/files/${id}`, { method: 'DELETE' });
-    fetchKnowledgeBase();
-  };
+const deleteFile = async (id: number) => {
+
+  const confirmDelete = window.confirm(
+    "Are you sure you want to delete this document?"
+  );
+
+  if (!confirmDelete) return;
+
+  const res = await fetch(`/api/files?id=${id}`, {
+    method: "DELETE"
+  });
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    alert("Delete failed");
+    console.error(data);
+    return;
+  }
+
+  fetchKnowledgeBase();
+};
 
   const updateFile = async (e: FormEvent) => {
     e.preventDefault();
