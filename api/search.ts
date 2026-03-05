@@ -10,13 +10,15 @@ const supabase = createClient(
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
 
-    const { query, limit = 6, apiKey } = req.body
+const { query, limit = 6 } = req.body
 
-    if (!query) {
-      return res.status(400).json({ error: "Query is required" })
-    }
+if (!query) {
+  return res.status(400).json({ error: "Query is required" })
+}
 
-    const ai = new GoogleGenAI({ apiKey })
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY
+})
 
     // Generate embedding for user query
     const embeddingResponse = await ai.models.embedContent({
