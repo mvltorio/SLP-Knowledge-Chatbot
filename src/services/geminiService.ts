@@ -106,71 +106,129 @@ export async function analyzeImage(file: File, customKey?: string): Promise<stri
   return response.text || "[No description generated]";
 }
 
-export async function generateContent(prompt: string, currentFiles: File[], knowledgeBase: KnowledgeDocument[], customKey?: string, chatHistory: any[] = []): Promise<{ text: string; chart?: ChartSpec; fileDownload?: any }> {
+export async function generateContent(
+  prompt: string,
+  currentFiles: File[],
+  knowledgeBase: KnowledgeDocument[],
+  customKey?: string,
+  chatHistory: any[] = []
+): Promise<{ text: string; chart?: ChartSpec; fileDownload?: any }> {
+
   const apiKey = getApiKey(customKey);
   if (!apiKey) {
     throw new Error("Gemini API Key is missing. Please configure it in the sidebar.");
   }
 
   const ai = new GoogleGenAI({ apiKey });
+
   const imageParts = await Promise.all(
-    currentFiles.filter(file => file.type.startsWith('image/')).map(imageFileToGenerativePart)
+    currentFiles
+      .filter(file => file.type.startsWith('image/'))
+      .map(imageFileToGenerativePart)
   );
 
-  // RAG: Search for relevant documents from the backend
-  let relevantDocs: any[] = [];
+  // ===============================
+  // RAG SEARCH
+  // ===============================
+
+  let relevantDocs: KnowledgeDocument[] = [];
+
   try {
+
     const searchRes = await fetch('/api/search', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: prompt, limit: 5, apiKey })
+      body: JSON.stringify({ query: prompt, limit: 5 })
     });
+
     if (searchRes.ok) {
       relevantDocs = await searchRes.json();
     }
-  } catch (e) {
-    console.error("RAG Search Error:", e);
-    // Fallback to provided knowledgeBase if search fails
-    relevantDocs = knowledgeBase
-  .filter(doc => doc.content)
-  .slice(0, 5);
+
+  } catch (error) {
+    console.error("RAG search failed:", error);
   }
 
-  const fileContext = relevantDocs
-  .map(doc => `
-Document: ${doc.name}
-Category: ${doc.category}
+  // ===============================
+  // FALLBACK IF NO SEARCH RESULTS
+  // ===============================
 
+  if (!relevantDocs || relevantDocs.length === 0) {
+
+    relevantDocs = knowledgeBase
+      .filter(doc => doc.content && doc.content.length > 50)
+      .slice(0, 5);
+
+  }
+
+  // ===============================
+  // BUILD DOCUMENT CONTEXT
+  // ===============================
+
+  const fileContext = relevantDocs
+    .map(doc => `
+DOCUMENT NAME: ${doc.name}
+CATEGORY: ${doc.category}
+
+CONTENT:
 ${doc.content}
 `)
-  .join("\n\n---\n\n");
+    .join("\n\n---------------------\n\n");
 
-  const historyContext = chatHistory.slice(-5).map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.text}`).join('\n');
-  
+
+  const historyContext = chatHistory
+    .slice(-5)
+    .map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.text}`)
+    .join('\n');
+
+
   const combinedText = `
-User Question: ${prompt}
 
-You are a SLP Knowledge Assistant. Use the following documents from the user's knowledge base to answer the question. 
+You are the **SLP Knowledge Chatbot**.
 
-CHAT HISTORY (Last 5 messages):
+Your job is to answer questions using ONLY the uploaded documents.
+
+If the answer exists in the documents, explain clearly.
+
+If the user asks about proposals, guidelines, forms, or SLP data,
+analyze the documents and summarize them.
+
+If the answer is not in the documents say:
+
+"I don't have that information in my current knowledge base."
+
+------------------------------
+
+CHAT HISTORY:
 ${historyContext}
 
-KNOWLEDGE BASE DOCUMENTS (Most relevant found via RAG):
+------------------------------
+
+KNOWLEDGE BASE DOCUMENTS:
+
 ${fileContext}
 
-INSTRUCTIONS:
-1. Answer the question accurately based ONLY on the provided documents.
-2. If the user asks for a copy, download, or to see a specific document, identify the File ID and Name from the list above and include it in the "fileDownload" field of your response.
-3. For SLPIS data, if the data is available in the documents:
-   - Create a "chart" object with the appropriate data.
-   - Include a Markdown table in the "text" field.
-4. If the information is not in the documents, say "I don't have that information in my current knowledge base."
+------------------------------
+
+USER QUESTION:
+${prompt}
+
+------------------------------
+
+Answer clearly and professionally.
+
 `.trim();
 
+
   const textPart = { text: combinedText };
-  const contents = { parts: [textPart, ...imageParts] };
+
+  const contents = {
+    parts: [textPart, ...imageParts]
+  };
+
 
   try {
+
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: contents,
@@ -179,16 +237,20 @@ INSTRUCTIONS:
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            text: { type: Type.STRING, description: 'The textual response to the user.' },
-            chart: { ...chartSchema, description: 'A chart visualization, if requested.' },
+            text: {
+              type: Type.STRING,
+              description: 'The textual response to the user.'
+            },
+            chart: {
+              ...chartSchema,
+              description: 'Chart visualization if needed.'
+            },
             fileDownload: {
               type: Type.OBJECT,
               properties: {
-                id: { type: Type.NUMBER, description: 'The ID of the file to download.' },
-                name: { type: Type.STRING, description: 'The name of the file to download.' }
-              },
-              required: ['id', 'name'],
-              description: 'Information about a file the user wants to download.'
+                id: { type: Type.NUMBER },
+                name: { type: Type.STRING }
+              }
             }
           },
           required: ['text']
@@ -197,21 +259,31 @@ INSTRUCTIONS:
     });
 
     const responseText = response.text;
+
     if (!responseText) {
-        return { text: 'The AI model returned an empty response.' };
+      return { text: "The AI returned an empty response." };
     }
 
-    const responseObject = JSON.parse(responseText);
+    const parsed = JSON.parse(responseText);
+
     return {
-        text: responseObject.text || 'Process completed.',
-        chart: responseObject.chart,
-        fileDownload: responseObject.fileDownload
+      text: parsed.text || "Process completed.",
+      chart: parsed.chart,
+      fileDownload: parsed.fileDownload
     };
-  } catch (e: any) {
-    console.error("Gemini API Error:", e);
-    if (e instanceof SyntaxError) {
-        return { text: "I encountered an error formatting the response. " + (e as any).target?.responseText || "Error parsing AI response." };
+
+  } catch (error: any) {
+
+    console.error("Gemini API Error:", error);
+
+    if (error instanceof SyntaxError) {
+      return {
+        text: "There was an error parsing the AI response."
+      };
     }
-    throw e;
+
+    throw error;
+
   }
+
 }
