@@ -437,7 +437,7 @@ export default function App() {
               content = `[Binary File: ${file.type || 'unknown type'}]`;
             }
 
-            await fetch('/api/files/upload', {
+            await fetch('/api/files', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
