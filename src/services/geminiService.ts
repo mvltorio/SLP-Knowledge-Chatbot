@@ -228,54 +228,34 @@ Answer clearly and professionally.
 
   try {
 
-let response;
-
-for (let attempt = 0; attempt < 1; attempt++) {
-  try {
-
-    response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
-      contents: contents,
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
+const response = await ai.models.generateContent({
+  model: 'gemini-2.0-flash',
+  contents: contents,
+  config: {
+    responseMimeType: 'application/json',
+    responseSchema: {
+      type: Type.OBJECT,
+      properties: {
+        text: {
+          type: Type.STRING,
+          description: 'The textual response to the user.'
+        },
+        chart: {
+          ...chartSchema,
+          description: 'Chart visualization if needed.'
+        },
+        fileDownload: {
           type: Type.OBJECT,
           properties: {
-            text: {
-              type: Type.STRING,
-              description: 'The textual response to the user.'
-            },
-            chart: {
-              ...chartSchema,
-              description: 'Chart visualization if needed.'
-            },
-            fileDownload: {
-              type: Type.OBJECT,
-              properties: {
-                id: { type: Type.NUMBER },
-                name: { type: Type.STRING }
-              }
-            }
-          },
-          required: ['text']
+            id: { type: Type.NUMBER },
+            name: { type: Type.STRING }
+          }
         }
-      }
-    });
-
-    break;
-
-  } catch (err: any) {
-
-    if (err.message?.includes("503") && attempt < 2) {
-      console.warn("Gemini overloaded. Retrying...");
-      await new Promise(r => setTimeout(r, 2000));
-      continue;
+      },
+      required: ['text']
     }
-
-    throw err;
   }
-}
-
+});
     const responseText = response.text;
 
     if (!responseText) {
