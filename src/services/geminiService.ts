@@ -2,19 +2,16 @@ import { GoogleGenAI, Part, Type } from "@google/genai";
 import { findRelevantDocs } from "../../lib/vectorSearch";
 import { ChartSpec } from "../types";
 
-const getApiKey = (customKey?: string) => {
-
-  if (customKey && customKey.trim() !== "") {
-    return customKey.trim();
-  }
+const getApiKey = () => {
 
   const envKey = import.meta.env.VITE_GEMINI_API_KEY;
 
   if (!envKey) {
-    throw new Error("Gemini API key is not configured.");
+    throw new Error("Gemini API key missing in environment variables.");
   }
 
   return envKey;
+
 };
 
 const chartSchema = {
@@ -80,7 +77,7 @@ export interface KnowledgeDocument {
 
 export async function validateApiKey(key: string): Promise<boolean> {
   try {
-    const apiKey = getApiKey(key);
+    const apiKey = getApiKey();
     if (!apiKey) return false;
     const ai = new GoogleGenAI({ apiKey });
     await ai.models.generateContent({
@@ -96,7 +93,7 @@ export async function validateApiKey(key: string): Promise<boolean> {
 }
 
 export async function analyzeImage(file: File, customKey?: string): Promise<string> {
-  const apiKey = getApiKey(customKey);
+  const apiKey = getApiKey();
   if (!apiKey) throw new Error("Gemini API Key is missing. Please configure it in the sidebar.");
 
   const ai = new GoogleGenAI({ apiKey });
@@ -122,7 +119,7 @@ export async function generateContent(
   chatHistory: any[] = []
 ): Promise<{ text: string; chart?: ChartSpec; fileDownload?: any }> {
 
-  const apiKey = getApiKey(customKey);
+  const apiKey = getApiKey();
   if (!apiKey) {
     throw new Error("Gemini API Key is missing. Please configure it in the sidebar.");
   }
