@@ -1,12 +1,12 @@
+import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { supabase } from "./db";
 
-export default async function handler(req: any, res: any) {
-
+export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
 
-    // =============================
+    // ===================================
     // GET FILES
-    // =============================
+    // ===================================
     if (req.method === "GET") {
 
       const { data, error } = await supabase
@@ -16,6 +16,7 @@ export default async function handler(req: any, res: any) {
 
       if (error) {
         console.error("SUPABASE FETCH ERROR:", error);
+
         return res.status(500).json({
           message: "Failed to fetch files",
           error: error.message
@@ -26,16 +27,23 @@ export default async function handler(req: any, res: any) {
     }
 
 
-    // =============================
-    // UPLOAD FILE
-    // =============================
+    // ===================================
+    // UPLOAD FILE (TEXT CONTENT)
+    // ===================================
     if (req.method === "POST") {
+
+      if (!req.body) {
+        return res.status(400).json({
+          message: "Request body is empty"
+        });
+      }
 
       const { name, category, content, type } = req.body;
 
       if (!name || !category || !content) {
         return res.status(400).json({
-          message: "Missing required fields"
+          message: "Missing required fields",
+          required: ["name", "category", "content"]
         });
       }
 
@@ -54,6 +62,7 @@ export default async function handler(req: any, res: any) {
 
       if (error) {
         console.error("SUPABASE INSERT ERROR:", error);
+
         return res.status(500).json({
           message: "Upload failed",
           error: error.message
@@ -64,9 +73,9 @@ export default async function handler(req: any, res: any) {
     }
 
 
-    // =============================
+    // ===================================
     // DELETE FILE
-    // =============================
+    // ===================================
     if (req.method === "DELETE") {
 
       const { id } = req.query;
@@ -84,6 +93,7 @@ export default async function handler(req: any, res: any) {
 
       if (error) {
         console.error("SUPABASE DELETE ERROR:", error);
+
         return res.status(500).json({
           message: "Delete failed",
           error: error.message
@@ -96,9 +106,9 @@ export default async function handler(req: any, res: any) {
     }
 
 
-    // =============================
+    // ===================================
     // UPDATE FILE
-    // =============================
+    // ===================================
     if (req.method === "PUT") {
 
       const { id } = req.query;
@@ -122,6 +132,7 @@ export default async function handler(req: any, res: any) {
 
       if (error) {
         console.error("SUPABASE UPDATE ERROR:", error);
+
         return res.status(500).json({
           message: "Update failed",
           error: error.message
@@ -132,9 +143,9 @@ export default async function handler(req: any, res: any) {
     }
 
 
-    // =============================
+    // ===================================
     // METHOD NOT ALLOWED
-    // =============================
+    // ===================================
     return res.status(405).json({
       message: "Method not allowed"
     });
@@ -145,7 +156,7 @@ export default async function handler(req: any, res: any) {
 
     return res.status(500).json({
       message: "Server crashed",
-      error: err.message
+      error: err?.message || "Unknown error"
     });
   }
 }
