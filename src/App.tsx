@@ -913,7 +913,6 @@ const approveUser = async (userId: number, role: string) => {
                 <input
   type="file"
   multiple
-  {...({ webkitdirectory: "true", directory: "" } as any)}
   className="absolute inset-0 opacity-0 cursor-pointer"
   onChange={(e) => handleFileChange(e.target.files)}
 />
