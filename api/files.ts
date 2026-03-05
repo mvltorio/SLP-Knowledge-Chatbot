@@ -2,33 +2,42 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { supabase } from "./db";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+
   try {
 
-    // =====================
+    // ===============================
     // GET FILES
-    // =====================
+    // ===============================
     if (req.method === "GET") {
 
       const { data, error } = await supabase
         .from("files")
-        .select("*")
-        .order("uploaded_at", { ascending: false });
+        .select("*");
 
-      if (error) throw error;
+      if (error) {
+        console.error("SUPABASE FETCH ERROR:", error);
+        return res.status(500).json({
+          message: "Failed to fetch files",
+          error: error.message
+        });
+      }
 
       return res.status(200).json(data);
     }
 
-    // =====================
+    // ===============================
     // UPLOAD FILE
-    // =====================
+    // ===============================
     if (req.method === "POST") {
 
-      const { name, category, content, type } = req.body || {};
+      const body = req.body || {};
+
+      const { name, category, content, type } = body;
 
       if (!name || !category || !content) {
         return res.status(400).json({
-          error: "Missing required fields"
+          message: "Missing required fields",
+          required: ["name", "category", "content"]
         });
       }
 
@@ -45,20 +54,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error("SUPABASE INSERT ERROR:", error);
+        return res.status(500).json({
+          message: "Upload failed",
+          error: error.message
+        });
+      }
 
       return res.status(200).json(data);
     }
 
-    // =====================
-    // DELETE
-    // =====================
+    // ===============================
+    // DELETE FILE
+    // ===============================
     if (req.method === "DELETE") {
 
       const { id } = req.query;
 
       if (!id) {
-        return res.status(400).json({ error: "Missing id" });
+        return res.status(400).json({
+          message: "Missing file ID"
+        });
       }
 
       const { error } = await supabase
@@ -66,43 +83,68 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .delete()
         .eq("id", id);
 
-      if (error) throw error;
+      if (error) {
+        console.error("SUPABASE DELETE ERROR:", error);
+        return res.status(500).json({
+          message: "Delete failed",
+          error: error.message
+        });
+      }
 
-      return res.status(200).json({ success: true });
+      return res.status(200).json({
+        success: true
+      });
     }
 
-    // =====================
-    // UPDATE
-    // =====================
+    // ===============================
+    // UPDATE FILE
+    // ===============================
     if (req.method === "PUT") {
 
       const { id } = req.query;
-      const { name, category } = req.body;
+      const { name, category } = req.body || {};
 
       if (!id) {
-        return res.status(400).json({ error: "Missing id" });
+        return res.status(400).json({
+          message: "Missing file ID"
+        });
       }
 
       const { data, error } = await supabase
         .from("files")
-        .update({ name, category })
+        .update({
+          name,
+          category
+        })
         .eq("id", id)
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error("SUPABASE UPDATE ERROR:", error);
+        return res.status(500).json({
+          message: "Update failed",
+          error: error.message
+        });
+      }
 
       return res.status(200).json(data);
     }
 
-    return res.status(405).json({ error: "Method not allowed" });
+    // ===============================
+    // METHOD NOT ALLOWED
+    // ===============================
+    return res.status(405).json({
+      message: "Method not allowed"
+    });
 
   } catch (err: any) {
 
-    console.error("FILES API ERROR:", err);
+    console.error("FILES API CRASH:", err);
 
     return res.status(500).json({
-      error: err.message || "Server error"
+      message: "Server crashed",
+      error: err?.message || "Unknown error"
     });
   }
 }
