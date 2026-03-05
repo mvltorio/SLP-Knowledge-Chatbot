@@ -906,7 +906,13 @@ export default function App() {
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={(e) => { e.preventDefault(); setIsDragging(false); handleFileChange(e.dataTransfer.files); }}
               >
-                <input type="file" multiple className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => handleFileChange(e.target.files)} />
+                <input
+  type="file"
+  multiple
+  {...({ webkitdirectory: "true", directory: "" } as any)}
+  className="absolute inset-0 opacity-0 cursor-pointer"
+  onChange={(e) => handleFileChange(e.target.files)}
+/>
                 <Paperclip className="w-8 h-8 text-emerald-400 mb-2 group-hover:scale-110 transition-transform" />
                 <p className="text-emerald-700 text-xs font-medium text-center px-4">Drop files into <span className="font-bold">{selectedCategory}</span></p>
               </div>
