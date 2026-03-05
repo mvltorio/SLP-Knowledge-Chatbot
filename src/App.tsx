@@ -853,9 +853,17 @@ const deleteFile = async (id: number) => {
                     ${keyStatus === 'valid' ? 'border-emerald-500 bg-emerald-50/30' :
                           keyStatus === 'invalid' ? 'border-red-300 bg-red-50/30' : 'border-emerald-200'}`}
                       value={customApiKey}
-                      onChange={(e) => {
-                        setCustomApiKey(e.target.value);
-                        if (keyStatus !== 'idle') setKeyStatus('idle');
+onChange={(e) => {
+  const key = e.target.value.trim();
+
+  setCustomApiKey(key);
+  localStorage.setItem("gemini_custom_key", key);
+
+  if (key.length > 20) {
+    setKeyStatus("valid");
+  } else {
+    setKeyStatus("idle");
+  }
                       }}
                     />
                   </div>
@@ -1058,7 +1066,7 @@ const deleteFile = async (id: number) => {
 
       {/* Chat Panel */}
       <div className="flex-1 flex flex-col bg-emerald-50/30 relative">
-        {quotaError && (
+        {quotaError && !customApiKey && (
           <div className="absolute top-0 left-0 right-0 z-50 bg-red-600 text-white p-4 flex items-center justify-between shadow-lg animate-in slide-in-from-top duration-300">
             <div className="flex items-center gap-3">
               <Key className="w-6 h-6 animate-bounce" />
