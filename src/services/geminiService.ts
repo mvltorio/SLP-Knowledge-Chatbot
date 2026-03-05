@@ -166,14 +166,13 @@ export async function generateContent(
   // ===============================
 
   const fileContext = relevantDocs
-    .map(doc => `
-DOCUMENT NAME: ${doc.name}
-CATEGORY: ${doc.category}
+  .map(doc => `
+Document: ${doc.name}
+Category: ${doc.category}
 
-CONTENT:
-${doc.content}
+${doc.content.slice(0,2000)}
 `)
-    .join("\n\n---------------------\n\n");
+  .join("\n\n---\n\n");
 
 
   const historyContext = chatHistory
