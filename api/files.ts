@@ -10,9 +10,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
 
-    // ============================
+    // =========================
     // GET FILES
-    // ============================
+    // =========================
     if (req.method === "GET") {
 
       const { data, error } = await supabase
@@ -30,9 +30,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
 
-    // ============================
+    // =========================
     // UPLOAD FILE
-    // ============================
+    // =========================
     if (req.method === "POST") {
 
       const { name, category, content, type } = req.body;
@@ -66,12 +66,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
 
-    // ============================
+    // =========================
     // DELETE FILE
-    // ============================
+    // =========================
     if (req.method === "DELETE") {
 
-      const { id } = req.query;
+      const id = req.query.id as string;
 
       if (!id) {
         return res.status(400).json({
@@ -97,12 +97,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
 
-    // ============================
+    // =========================
     // UPDATE FILE
-    // ============================
+    // =========================
     if (req.method === "PUT") {
 
-      const { id } = req.query;
+      const id = req.query.id as string;
       const { name, category } = req.body;
 
       if (!id) {
@@ -131,9 +131,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
 
-    // ============================
+    // =========================
     // METHOD NOT ALLOWED
-    // ============================
+    // =========================
     return res.status(405).json({
       error: "Method not allowed"
     });
