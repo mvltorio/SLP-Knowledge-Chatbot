@@ -228,8 +228,13 @@ Answer clearly and professionally.
 
   try {
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+let response;
+
+for (let attempt = 0; attempt < 3; attempt++) {
+  try {
+
+    response = await ai.models.generateContent({
+      model: 'gemini-2.0-flash',
       contents: contents,
       config: {
         responseMimeType: 'application/json',
@@ -256,6 +261,20 @@ Answer clearly and professionally.
         }
       }
     });
+
+    break;
+
+  } catch (err: any) {
+
+    if (err.message?.includes("503") && attempt < 2) {
+      console.warn("Gemini overloaded. Retrying...");
+      await new Promise(r => setTimeout(r, 2000));
+      continue;
+    }
+
+    throw err;
+  }
+}
 
     const responseText = response.text;
 
