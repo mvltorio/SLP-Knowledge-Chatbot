@@ -1,5 +1,6 @@
 import { GoogleGenAI, Part, Type } from "@google/genai";
-import { ChartSpec } from '../types';
+import { findRelevantDocs } from "../../lib/vectorSearch";
+import { ChartSpec } from "../types";
 
 const getApiKey = (customKey?: string) => {
   const key = (customKey && typeof customKey === 'string' && customKey.trim() !== '' && customKey !== 'undefined' && customKey !== 'null')
@@ -122,7 +123,7 @@ export async function generateContent(prompt: string, currentFiles: File[], know
     const searchRes = await fetch('/api/search', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: prompt, limit: 10, apiKey })
+      body: JSON.stringify({ query: prompt, limit: 5, apiKey })
     });
     if (searchRes.ok) {
       relevantDocs = await searchRes.json();
@@ -130,12 +131,19 @@ export async function generateContent(prompt: string, currentFiles: File[], know
   } catch (e) {
     console.error("RAG Search Error:", e);
     // Fallback to provided knowledgeBase if search fails
-    relevantDocs = knowledgeBase.slice(0, 5);
+    relevantDocs = knowledgeBase
+  .filter(doc => doc.content)
+  .slice(0, 5);
   }
 
-  const fileContext = relevantDocs.map((doc) => {
-      return `[File ID: ${doc.id || 'N/A'} | Name: ${doc.name} | Category: ${doc.category}]\n${doc.content}`;
-  }).join('\n\n---\n\n');
+  const fileContext = relevantDocs
+  .map(doc => `
+Document: ${doc.name}
+Category: ${doc.category}
+
+${doc.content}
+`)
+  .join("\n\n---\n\n");
 
   const historyContext = chatHistory.slice(-5).map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.text}`).join('\n');
   
