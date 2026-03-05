@@ -230,7 +230,7 @@ Answer clearly and professionally.
 
 let response;
 
-for (let attempt = 0; attempt < 3; attempt++) {
+for (let attempt = 0; attempt < 1; attempt++) {
   try {
 
     response = await ai.models.generateContent({
