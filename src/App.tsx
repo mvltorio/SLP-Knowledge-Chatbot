@@ -915,7 +915,9 @@ export default function App() {
                 <div className="mt-8">
                   <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Knowledge Base</h2>
                   <div className="space-y-2">
-                    {knowledgeBase.map((file: any, idx) => (
+                    {knowledgeBase
+                      .filter((file: any) => file.category === selectedCategory)
+                      .map((file: any, idx) => (
                       <div key={idx} className="flex flex-col bg-emerald-50 p-3 rounded-xl border border-emerald-100">
                         <div className="flex items-center justify-between min-w-0">
                           <div className="flex items-center min-w-0">
