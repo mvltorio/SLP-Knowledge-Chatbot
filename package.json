@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx server.ts",
+    "dev": "tsx api/health.ts",
     "build": "vite build",
     "vercel-build": "vite build",
     "preview": "vite preview",
