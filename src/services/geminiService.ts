@@ -84,7 +84,7 @@ export async function validateApiKey(key: string): Promise<boolean> {
     if (!apiKey) return false;
     const ai = new GoogleGenAI({ apiKey });
     await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-2.0-flash',
       contents: 'hi',
       config: { maxOutputTokens: 1 }
     });
@@ -102,7 +102,7 @@ export async function analyzeImage(file: File, customKey?: string): Promise<stri
   const ai = new GoogleGenAI({ apiKey });
   const part = await imageFileToGenerativePart(file);
   const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
+    model: 'gemini-2.0-flash',
     contents: {
       parts: [
         { text: "Describe this image in detail, including any text you see. If it's a document, extract all the text accurately." },
@@ -237,7 +237,7 @@ Answer clearly and professionally.
   try {
 
 const response = await ai.models.generateContent({
-  model: 'gemini-3-flash-preview',
+  model: 'gemini-2.0-flash',
   contents: contents,
   config: {
     responseMimeType: 'application/json',
