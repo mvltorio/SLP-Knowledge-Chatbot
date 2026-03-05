@@ -44,7 +44,7 @@ export default function App() {
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [authMessage, setAuthMessage] = useState('');
-  
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [knowledgeBase, setKnowledgeBase] = useState<KnowledgeDocument[]>([]);
@@ -59,10 +59,10 @@ export default function App() {
   const [oAuthDebugInfo, setOAuthDebugInfo] = useState<any>(null);
   const [isValidatingKey, setIsValidatingKey] = useState(false);
   const [keyValidationError, setKeyValidationError] = useState<string | null>(null);
-  const [dbStatus, setDbStatus] = useState<{status: 'ok' | 'error' | 'loading', message?: string, hint?: string}>({status: 'loading'});
+  const [dbStatus, setDbStatus] = useState<{ status: 'ok' | 'error' | 'loading', message?: string, hint?: string }>({ status: 'loading' });
   const [customApiKey, setCustomApiKey] = useState(() => localStorage.getItem('gemini_custom_key') || '');
   const [isKeySaved, setIsKeySaved] = useState(false);
-  const [keyStatus, setKeyStatus] = useState<'idle' | 'validating' | 'valid' | 'invalid'>(() => 
+  const [keyStatus, setKeyStatus] = useState<'idle' | 'validating' | 'valid' | 'invalid'>(() =>
     (localStorage.getItem('gemini_key_status') as any) || 'idle'
   );
   const [quotaError, setQuotaError] = useState(false);
@@ -73,22 +73,20 @@ export default function App() {
   const [newUserPassword, setNewUserPassword] = useState('');
   const [newUserRole, setNewUserRole] = useState<'user' | 'admin'>('user');
   const [editingAdminUser, setEditingAdminUser] = useState<any>(null);
-/////////////////////////////////////////////////////
-// 🔐 AUTO RESTORE LOGIN SESSION (ADD THIS HERE)
-/////////////////////////////////////////////////////
 
-useEffect(() => {
-  const savedUser = localStorage.getItem('slp_user');
-  if (savedUser) {
-    try {
-      const parsed = JSON.parse(savedUser);
-      setUser(parsed);
-      setView('chat');
-    } catch {
-      localStorage.removeItem('slp_user');
+  // Auto restore login session
+  useEffect(() => {
+    const savedUser = localStorage.getItem('slp_user');
+    if (savedUser) {
+      try {
+        const parsed = JSON.parse(savedUser);
+        setUser(parsed);
+        setView('chat');
+      } catch {
+        localStorage.removeItem('slp_user');
+      }
     }
-  }
-}, []);
+  }, []);
 
   // Cooldown timer effect
   useEffect(() => {
@@ -103,44 +101,35 @@ useEffect(() => {
     const kbText = knowledgeBase.map(doc => doc.content).join(' ');
     const msgText = messages.map(msg => msg.text).join(' ');
     const totalChars = kbText.length + msgText.length;
-    // Rough estimate: 4 characters per token
     setEstimatedTokens(Math.ceil(totalChars / 4));
   }, [knowledgeBase, messages]);
 
   // Auth Handlers
   const handleLogin = async (e: FormEvent) => {
-  e.preventDefault();
-  setAuthMessage('');
+    e.preventDefault();
+    setAuthMessage('');
 
-  try {
-    const res = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: authEmail, password: authPassword })
-    });
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: authEmail, password: authPassword })
+      });
 
-    const data = await res.json();
+      const data = await res.json();
 
-    if (data.success && data.user) {
-      setUser(data.user);
-
-      // ✅ Save session
-      localStorage.setItem('slp_user', JSON.stringify(data.user));
-
-      // ✅ Redirect based on role
-      if (data.user.role === 'admin') {
+      if (data.success && data.user) {
+        setUser(data.user);
+        localStorage.setItem('slp_user', JSON.stringify(data.user));
         setView('chat');
       } else {
-        setView('chat');
+        setAuthMessage(data.message || 'Login failed.');
       }
-    } else {
-      setAuthMessage(data.message || 'Login failed.');
+    } catch (error) {
+      console.error('Login error:', error);
+      setAuthMessage('Connection error.');
     }
-  } catch (error) {
-    console.error('Login error:', error);
-    setAuthMessage('Connection error.');
-  }
-};
+  };
 
   const handleClearChat = () => {
     if (window.confirm('Clear all messages? This will also reset your token usage.')) {
@@ -275,53 +264,54 @@ useEffect(() => {
     fetchKnowledgeBase();
   };
 
-const handleConnectDrive = () => {
-  window.open(
-    "https://drive.google.com/drive/folders/1gD2-yPxfUVazMp3jycUxBnHvLtGt7jy_",
-    "_blank"
-  );
-};
+  const handleConnectDrive = () => {
+    window.open(
+      "https://drive.google.com/drive/folders/1gD2-yPxfUVazMp3jycUxBnHvLtGt7jy_",
+      "_blank"
+    );
+  };
 
   const handleSyncDrive = async () => {
-  alert("Google Drive sync is disabled.");
+    alert("Google Drive sync is disabled.");
+  };
+
   const handleFetchOAuthDebug = async () => {
-  try {
-    const res = await fetch('/api/auth/google/debug');
-    const data = await res.json();
-    setOAuthDebugInfo(data);
-    setShowOAuthDebug(true);
-  } catch (err) {
-    alert("Failed to fetch OAuth debug info.");
-  }
-};
-   };
+    try {
+      const res = await fetch('/api/auth/google/debug');
+      const data = await res.json();
+      setOAuthDebugInfo(data);
+      setShowOAuthDebug(true);
+    } catch (err) {
+      alert("Failed to fetch OAuth debug info.");
+    }
+  };
+
   useEffect(() => {
     const checkDriveStatus = async () => {
-        try {
-            const res = await fetch('/api/drive/status');
-            const data = await res.json();
-            setIsDriveConnected(data.connected);
-        } catch (e) {
-            console.error('Failed to check drive status:', e);
-        }
+      try {
+        const res = await fetch('/api/drive/status');
+        const data = await res.json();
+        setIsDriveConnected(data.connected);
+      } catch (e) {
+        console.error('Failed to check drive status:', e);
+      }
     };
     const checkDbHealth = async () => {
-        try {
-            const res = await fetch('/api/health');
-            const data = await res.json();
-            setDbStatus(data);
-        } catch (e) {
-            setDbStatus({ status: 'error', message: 'Could not connect to backend.' });
-        }
+      try {
+        const res = await fetch('/api/health');
+        const data = await res.json();
+        setDbStatus(data);
+      } catch (e) {
+        setDbStatus({ status: 'error', message: 'Could not connect to backend.' });
+      }
     };
     const cleanupFiles = async () => {
-        try {
-            await fetch('/api/cleanup', { method: 'POST' });
-        } catch (e) {
-            console.error('Cleanup failed:', e);
-        }
+      try {
+        await fetch('/api/cleanup', { method: 'POST' });
+      } catch (e) {
+        console.error('Cleanup failed:', e);
+      }
     };
-    // checkDriveStatus();  // TEMP DISABLED
     checkDbHealth();
     cleanupFiles();
   }, []);
@@ -347,7 +337,7 @@ const handleConnectDrive = () => {
       const arrayBuffer = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
       let fullText = '';
-      
+
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const textContent = await page.getTextContent();
@@ -379,13 +369,13 @@ const handleConnectDrive = () => {
       const arrayBuffer = await file.arrayBuffer();
       const workbook = XLSX.read(arrayBuffer);
       let fullText = '';
-      
+
       workbook.SheetNames.forEach(sheetName => {
         const sheet = workbook.Sheets[sheetName];
         const csv = XLSX.utils.sheet_to_csv(sheet);
         fullText += `--- Sheet: ${sheetName} ---\n${csv}\n\n`;
       });
-      
+
       return fullText;
     } catch (error) {
       console.error('Error extracting Excel text:', error);
@@ -400,73 +390,69 @@ const handleConnectDrive = () => {
       const filesArray = Array.from(selectedFiles);
       const targetCategory = overrideCategory || selectedCategory;
       let processedCount = 0;
-      
+
       try {
         for (const file of filesArray) {
-            let content = '';
-            const isText = file.type.startsWith('text/') || 
-                           file.type === 'application/json' || 
-                           file.name.endsWith('.txt') || 
-                           file.name.endsWith('.md') || 
-                           file.name.endsWith('.csv');
-            const isPDF = file.type === 'application/pdf' || file.name.endsWith('.pdf');
-            const isDocx = file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || file.name.endsWith('.docx');
-            const isExcel = file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || 
-                            file.type === 'application/vnd.ms-excel' || 
-                            file.name.endsWith('.xlsx') || 
-                            file.name.endsWith('.xls');
-            const isImage = file.type.startsWith('image/');
+          let content = '';
+          const isText = file.type.startsWith('text/') ||
+            file.type === 'application/json' ||
+            file.name.endsWith('.txt') ||
+            file.name.endsWith('.md') ||
+            file.name.endsWith('.csv');
+          const isPDF = file.type === 'application/pdf' || file.name.endsWith('.pdf');
+          const isDocx = file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || file.name.endsWith('.docx');
+          const isExcel = file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+            file.type === 'application/vnd.ms-excel' ||
+            file.name.endsWith('.xlsx') ||
+            file.name.endsWith('.xls');
+          const isImage = file.type.startsWith('image/');
 
-            try {
-                if (isPDF) {
-                    content = await extractTextFromPDF(file);
-                } else if (isDocx) {
-                    content = await extractTextFromDocx(file);
-                } else if (isExcel) {
-                    content = await extractTextFromExcel(file);
-                } else if (isImage) {
-                    // Throttling for image analysis which uses Gemini API
-                    if (processedCount > 0 && processedCount % 5 === 0) {
-                        await new Promise(r => setTimeout(r, 2000)); // Wait 2s every 5 images
-                    }
-                    content = await analyzeImage(file, customApiKey);
-                    processedCount++;
-                } else if (isText) {
-                    const reader = new FileReader();
-                    content = await new Promise<string>((resolve) => {
-                        reader.onload = () => resolve(reader.result as string);
-                        reader.readAsText(file);
-                    });
-                } else {
-                    content = `[Binary File: ${file.type || 'unknown type'}]`;
-                }
-
-                // Upload to server
-                await fetch('/api/files/upload', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        name: file.name,
-                        category: targetCategory,
-                        content: content,
-                        type: file.type,
-                        apiKey: customApiKey
-                    })
-                });
-
-                
-                // Small delay between any file to avoid overwhelming the server/DB
-                await new Promise(r => setTimeout(r, 100));
-            } catch (fileError: any) {
-                console.error(`Error processing file ${file.name}:`, fileError);
-                const errorMsg = fileError.message?.includes('429') 
-                    ? 'Quota exceeded. Please wait a moment and try again.' 
-                    : 'Error processing file.';
-                alert(`Failed to upload ${file.name}: ${errorMsg}`);
-                if (fileError.message?.includes('429')) {
-                    await new Promise(r => setTimeout(r, 5000)); // Wait 5s on quota error
-                }
+          try {
+            if (isPDF) {
+              content = await extractTextFromPDF(file);
+            } else if (isDocx) {
+              content = await extractTextFromDocx(file);
+            } else if (isExcel) {
+              content = await extractTextFromExcel(file);
+            } else if (isImage) {
+              if (processedCount > 0 && processedCount % 5 === 0) {
+                await new Promise(r => setTimeout(r, 2000));
+              }
+              content = await analyzeImage(file, customApiKey);
+              processedCount++;
+            } else if (isText) {
+              const reader = new FileReader();
+              content = await new Promise<string>((resolve) => {
+                reader.onload = () => resolve(reader.result as string);
+                reader.readAsText(file);
+              });
+            } else {
+              content = `[Binary File: ${file.type || 'unknown type'}]`;
             }
+
+            await fetch('/api/files/upload', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                name: file.name,
+                category: targetCategory,
+                content: content,
+                type: file.type,
+                apiKey: customApiKey
+              })
+            });
+
+            await new Promise(r => setTimeout(r, 100));
+          } catch (fileError: any) {
+            console.error(`Error processing file ${file.name}:`, fileError);
+            const errorMsg = fileError.message?.includes('429')
+              ? 'Quota exceeded. Please wait a moment and try again.'
+              : 'Error processing file.';
+            alert(`Failed to upload ${file.name}: ${errorMsg}`);
+            if (fileError.message?.includes('429')) {
+              await new Promise(r => setTimeout(r, 5000));
+            }
+          }
         }
         fetchKnowledgeBase();
       } catch (globalError) {
@@ -486,8 +472,7 @@ const handleConnectDrive = () => {
     const currentInput = input;
     setInput('');
     setIsLoading(true);
-    
-    // Trigger cleanup on message send as well
+
     fetch('/api/cleanup', { method: 'POST' }).catch(() => {});
 
     const isQuotaError = (err: any) => {
@@ -509,16 +494,16 @@ const handleConnectDrive = () => {
     } catch (error: any) {
       console.error("Error generating content:", error);
       let errorMessage = `Error: ${error.message || 'Something went wrong.'}`;
-      
+
       if (isQuotaError(error)) {
-          setQuotaError(true);
-          if (customApiKey) {
-            errorMessage = "⚠️ **Your API Quota Exhausted**: Your private key has reached its temporary limit (15 requests/min). Please wait 60 seconds and try again.";
-          } else {
-            errorMessage = "⚠️ **Shared Quota Exhausted**: The shared AI limit has been reached. \n\nTo fix this permanently and for free, please paste your own API key in the sidebar. [Get a free key here](https://aistudio.google.com/app/apikey).";
-          }
+        setQuotaError(true);
+        if (customApiKey) {
+          errorMessage = "⚠️ **Your API Quota Exhausted**: Your private key has reached its temporary limit (15 requests/min). Please wait 60 seconds and try again.";
+        } else {
+          errorMessage = "⚠️ **Shared Quota Exhausted**: The shared AI limit has been reached. \n\nTo fix this permanently and for free, please paste your own API key in the sidebar. [Get a free key here](https://aistudio.google.com/app/apikey).";
+        }
       }
-      
+
       const errorResponse: Message = {
         role: 'model',
         text: errorMessage,
@@ -531,12 +516,11 @@ const handleConnectDrive = () => {
 
   const handleRetry = () => {
     if (retryCooldown > 0) return;
-    
+
     const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
     if (lastUserMsg) {
       setInput(lastUserMsg.text);
-      setRetryCooldown(5); // 5 second cooldown
-      // Remove the last error message if it exists
+      setRetryCooldown(5);
       setMessages(prev => {
         const last = prev[prev.length - 1];
         if (last && last.role === 'model' && (last.text.includes('Error') || last.text.includes('Quota'))) {
@@ -565,13 +549,13 @@ const handleConnectDrive = () => {
               </div>
             )}
           </div>
-          
+
           <form onSubmit={view === 'login' ? handleLogin : handleRegister} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
-              <input 
-                type="email" 
-                required 
+              <input
+                type="email"
+                required
                 className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none transition"
                 value={authEmail}
                 onChange={(e) => setAuthEmail(e.target.value)}
@@ -579,9 +563,9 @@ const handleConnectDrive = () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-              <input 
-                type="password" 
-                required 
+              <input
+                type="password"
+                required
                 className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none transition"
                 value={authPassword}
                 onChange={(e) => setAuthPassword(e.target.value)}
@@ -592,9 +576,9 @@ const handleConnectDrive = () => {
               {view === 'login' ? 'Sign In' : 'Register'}
             </button>
           </form>
-          
+
           <div className="mt-6 text-center">
-            <button 
+            <button
               onClick={() => { setView(view === 'login' ? 'register' : 'login'); setAuthMessage(''); }}
               className="text-emerald-600 text-sm font-medium hover:underline"
             >
@@ -616,8 +600,8 @@ const handleConnectDrive = () => {
               <p className="text-gray-500">Manage user access and approvals</p>
             </div>
             <div className="flex gap-3">
-              <button 
-                onClick={() => setIsAddingUser(true)} 
+              <button
+                onClick={() => setIsAddingUser(true)}
                 className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition font-bold shadow-lg shadow-emerald-100"
               >
                 <UserPlus className="w-4 h-4" /> Add User
@@ -646,7 +630,7 @@ const handleConnectDrive = () => {
                   <div className="flex gap-2 items-center">
                     {u.status === 'pending' && (
                       <div className="flex items-center gap-2">
-                        <select 
+                        <select
                           id={`role-${u.id}`}
                           className="text-xs p-2 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
                           defaultValue="user"
@@ -654,7 +638,7 @@ const handleConnectDrive = () => {
                           <option value="user">User</option>
                           <option value="admin">Admin</option>
                         </select>
-                        <button 
+                        <button
                           onClick={() => {
                             const roleSelect = document.getElementById(`role-${u.id}`) as HTMLSelectElement;
                             approveUser(u.id, roleSelect.value);
@@ -666,14 +650,14 @@ const handleConnectDrive = () => {
                       </div>
                     )}
                     <div className="flex gap-2 items-center">
-                      <button 
+                      <button
                         onClick={() => setEditingAdminUser(u)}
                         className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition"
                         title="Edit User Role"
                       >
                         <Edit3 className="w-4 h-4" />
                       </button>
-                      <button 
+                      <button
                         onClick={() => rejectUser(u.id)}
                         className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition text-sm font-bold"
                       >
@@ -695,9 +679,9 @@ const handleConnectDrive = () => {
               <form onSubmit={handleAddUser} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
-                  <input 
-                    type="email" 
-                    required 
+                  <input
+                    type="email"
+                    required
                     className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                     value={newUserEmail}
                     onChange={(e) => setNewUserEmail(e.target.value)}
@@ -705,9 +689,9 @@ const handleConnectDrive = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                  <input 
-                    type="password" 
-                    required 
+                  <input
+                    type="password"
+                    required
                     className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                     value={newUserPassword}
                     onChange={(e) => setNewUserPassword(e.target.value)}
@@ -715,7 +699,7 @@ const handleConnectDrive = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-                  <select 
+                  <select
                     className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                     value={newUserRole}
                     onChange={(e) => setNewUserRole(e.target.value as any)}
@@ -746,7 +730,7 @@ const handleConnectDrive = () => {
               <form onSubmit={handleUpdateUserRole} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-                  <select 
+                  <select
                     className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                     value={editingAdminUser.role}
                     onChange={(e) => setEditingAdminUser({ ...editingAdminUser, role: e.target.value })}
@@ -771,6 +755,7 @@ const handleConnectDrive = () => {
     );
   }
 
+  // Chat view
   return (
     <div className="h-screen w-screen bg-emerald-50 flex antialiased overflow-hidden">
       {/* Knowledge Panel */}
@@ -789,18 +774,11 @@ const handleConnectDrive = () => {
             <div className="flex gap-2">
               {user?.role === 'admin' && (
                 <>
-                  
                   <button onClick={() => setView('admin')} className="p-2 text-emerald-600 hover:bg-emerald-100 rounded-lg transition" title="Admin Panel">
                     <Users className="w-5 h-5" />
                   </button>
-                  <button 
-                    onClick={async () => {
-                      const res = await fetch('/api/auth/google/debug');
-                      const data = await res.json();
-                      const currentOrigin = window.location.origin;
-                      const expectedRedirect = `${currentOrigin}/api/auth/google/callback`;
-                      alert(`DEBUG INFO:\nYour Current Origin: ${currentOrigin}\nExpected Redirect URI: ${expectedRedirect}\n\nServer Configured APP_URL: ${data.appUrl}\n\nMake sure the "Expected Redirect URI" above is added to your Google Cloud Console.`);
-                    }}
+                  <button
+                    onClick={handleFetchOAuthDebug}
                     className="p-2 text-gray-400 hover:bg-emerald-100 rounded-lg transition"
                     title="Debug Connection"
                   >
@@ -808,19 +786,19 @@ const handleConnectDrive = () => {
                   </button>
                 </>
               )}
-              <button   onClick={() => {
-    localStorage.removeItem('slp_user');
-    setUser(null);
-    setView('login');
-  }}
-  className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition"
-  title="Logout"
->
-  <LogOut className="w-5 h-5" />
+              <button onClick={() => {
+                localStorage.removeItem('slp_user');
+                setUser(null);
+                setView('login');
+              }}
+                className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition"
+                title="Logout"
+              >
+                <LogOut className="w-5 h-5" />
               </button>
             </div>
           </div>
-          
+
           <div className="space-y-4">
             {user?.role === 'admin' && (
               <>
@@ -839,11 +817,11 @@ const handleConnectDrive = () => {
                     </div>
                   </label>
                   <div className="flex gap-2">
-                    <input 
+                    <input
                       type="password"
                       placeholder="Paste your key here..."
                       className={`flex-1 px-3 py-2 bg-white border rounded-lg text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none transition 
-                        ${keyStatus === 'valid' ? 'border-emerald-500 bg-emerald-50/30' : 
+                    ${keyStatus === 'valid' ? 'border-emerald-500 bg-emerald-50/30' :
                           keyStatus === 'invalid' ? 'border-red-300 bg-red-50/30' : 'border-emerald-200'}`}
                       value={customApiKey}
                       onChange={(e) => {
@@ -851,8 +829,6 @@ const handleConnectDrive = () => {
                         if (keyStatus !== 'idle') setKeyStatus('idle');
                       }}
                     />
-                    <div className="flex gap-1">
-                    </div>
                   </div>
                 </div>
 
@@ -864,7 +840,7 @@ const handleConnectDrive = () => {
                     </span>
                   </div>
                   <div className="w-full h-1.5 bg-emerald-100 rounded-full overflow-hidden">
-                    <div 
+                    <div
                       className={`h-full transition-all duration-500 ${estimatedTokens > 800000 ? 'bg-red-500' : 'bg-emerald-500'}`}
                       style={{ width: `${Math.min(100, (estimatedTokens / 1000000) * 100)}%` }}
                     />
@@ -878,7 +854,7 @@ const handleConnectDrive = () => {
                   <label className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Target Folder</label>
                   <div className="grid grid-cols-1 gap-1">
                     {CATEGORIES.map(cat => (
-                      <button 
+                      <button
                         key={cat}
                         onClick={() => setSelectedCategory(cat)}
                         onDragOver={(e) => {
@@ -916,7 +892,7 @@ const handleConnectDrive = () => {
         <div className="flex-1 p-6 overflow-y-auto">
           {user?.role === 'admin' ? (
             <>
-              <div 
+              <div
                 className={`relative group h-40 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center transition-all ${isDragging ? 'border-emerald-500 bg-emerald-50' : 'border-emerald-200 hover:border-emerald-400 bg-emerald-50/30'}`}
                 onDragEnter={() => setIsDragging(true)}
                 onDragLeave={() => setIsDragging(false)}
@@ -976,14 +952,6 @@ const handleConnectDrive = () => {
         <div className="p-4 border-t border-emerald-50 bg-emerald-50/30">
           <div className="flex flex-col items-center gap-1">
             <p className="text-[10px] text-emerald-700 font-bold tracking-widest uppercase">© 2026 MVLTORIO</p>
-            <div className="pt-2 border-t border-emerald-100">
-              <button 
-                onClick={handleFetchOAuthDebug}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gray-50 text-gray-500 rounded-lg text-[10px] font-bold hover:bg-gray-100 transition"
-              >
-                <HelpCircle className="w-3 h-3" /> OAuth Debug Info
-              </button>
-            </div>
           </div>
         </div>
 
@@ -995,8 +963,8 @@ const handleConnectDrive = () => {
               <form onSubmit={updateFile} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Document Name</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                     value={editingFile.name}
                     onChange={(e) => setEditingFile({ ...editingFile, name: e.target.value })}
@@ -1004,7 +972,7 @@ const handleConnectDrive = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-                  <select 
+                  <select
                     className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                     value={editingFile.category}
                     onChange={(e) => setEditingFile({ ...editingFile, category: e.target.value })}
@@ -1041,9 +1009,9 @@ const handleConnectDrive = () => {
             </div>
           </div>
         )}
-        
+
         <div className="mt-auto p-6 border-t border-emerald-100 space-y-3">
-          <button 
+          <button
             onClick={handleClearChat}
             className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-white text-emerald-600 border border-emerald-200 rounded-xl text-xs font-bold hover:bg-emerald-50 transition shadow-sm"
           >
@@ -1063,9 +1031,9 @@ const handleConnectDrive = () => {
                 <p className="text-xs opacity-90">Please paste your own FREE API key in the sidebar to continue.</p>
               </div>
             </div>
-            <a 
-              href="https://aistudio.google.com/app/apikey" 
-              target="_blank" 
+            <a
+              href="https://aistudio.google.com/app/apikey"
+              target="_blank"
               className="px-4 py-2 bg-white text-red-600 rounded-xl text-xs font-bold hover:bg-red-50 transition shadow-sm"
             >
               Get Free Key
@@ -1083,7 +1051,7 @@ const handleConnectDrive = () => {
                 <p className="text-emerald-600 mt-2 text-lg">I'm ready to analyze your knowledge base.</p>
               </div>
             )}
-            
+
             {messages.map((msg, idx) => (
               <div key={idx} className={`flex flex-col gap-2 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
                 <div className={`flex gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
@@ -1103,7 +1071,7 @@ const handleConnectDrive = () => {
                           <File className="w-5 h-5 text-emerald-600" />
                           <span className="text-sm font-medium text-emerald-900">{msg.fileDownload.name}</span>
                         </div>
-                        <a 
+                        <a
                           href={`/api/files/download/${msg.fileDownload.id}`}
                           download={msg.fileDownload.name}
                           className="p-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition shadow-sm"
@@ -1116,7 +1084,7 @@ const handleConnectDrive = () => {
                   </div>
                 </div>
                 {msg.role === 'model' && (msg.text.includes('Error') || msg.text.includes('Quota')) && (
-                  <button 
+                  <button
                     onClick={handleRetry}
                     disabled={retryCooldown > 0}
                     className={`ml-14 text-xs font-bold flex items-center gap-1 ${retryCooldown > 0 ? 'text-gray-400 cursor-not-allowed' : 'text-emerald-600 hover:underline'}`}
@@ -1126,7 +1094,7 @@ const handleConnectDrive = () => {
                 )}
               </div>
             ))}
-            
+
             {isLoading && (
               <div className="flex gap-4">
                 <div className="w-10 h-10 rounded-2xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
@@ -1157,13 +1125,13 @@ const handleConnectDrive = () => {
               />
               <div className="absolute right-2 top-2 flex gap-2">
                 <label className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl cursor-pointer transition-all">
-                  <input 
-                    type="file" 
-                    className="hidden" 
+                  <input
+                    type="file"
+                    className="hidden"
                     onChange={async (e) => {
                       const files = e.target.files;
                       if (!files || files.length === 0) return;
-                      
+
                       setIsLoading(true);
                       try {
                         const file = files[0];
@@ -1196,11 +1164,11 @@ const handleConnectDrive = () => {
                           })
                         });
 
-                        setMessages(prev => [...prev, { 
-                          role: 'user', 
-                          text: `Uploaded file: ${file.name} (Available for 24h)` 
+                        setMessages(prev => [...prev, {
+                          role: 'user',
+                          text: `Uploaded file: ${file.name} (Available for 24h)`
                         }]);
-                        
+
                         fetchKnowledgeBase();
                       } catch (err) {
                         console.error('Chat upload error:', err);
@@ -1212,8 +1180,8 @@ const handleConnectDrive = () => {
                   />
                   <Paperclip className="w-6 h-6" />
                 </label>
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   className="p-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 disabled:bg-emerald-200 transition-all shadow-lg shadow-emerald-100"
                   disabled={isLoading || !input.trim()}
                 >
@@ -1223,6 +1191,7 @@ const handleConnectDrive = () => {
             </form>
           </div>
         </div>
+
         {/* OAuth Debug Modal */}
         {showOAuthDebug && oAuthDebugInfo && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -1237,11 +1206,11 @@ const handleConnectDrive = () => {
                 <div className="p-4 bg-red-50 border border-red-100 rounded-xl">
                   <p className="text-sm text-red-700 font-bold mb-2">MANDATORY ACTION:</p>
                   <p className="text-xs text-red-600 leading-relaxed">
-                    You MUST copy the URI below and add it to your <strong>Google Cloud Console</strong> under 
+                    You MUST copy the URI below and add it to your <strong>Google Cloud Console</strong> under
                     "Authorized redirect URIs" for your OAuth 2.0 Client ID.
                   </p>
                 </div>
-                
+
                 <div className="space-y-2">
                   <label className="text-[10px] font-bold text-gray-400 uppercase">Authorized Redirect URI to Add:</label>
                   <div className="p-3 bg-gray-100 rounded-xl font-mono text-xs break-all border border-gray-200 select-all">
@@ -1271,7 +1240,7 @@ const handleConnectDrive = () => {
                   </p>
                 </div>
               </div>
-              <button 
+              <button
                 onClick={() => setShowOAuthDebug(false)}
                 className="mt-6 w-full py-3 bg-gray-900 text-white rounded-xl font-bold hover:bg-gray-800 transition"
               >
