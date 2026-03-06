@@ -40,7 +40,8 @@ export async function validateApiKey(): Promise<boolean> {
     const apiKey = getApiKey();
     if (!apiKey) return false;
 const groq = new Groq({
-  apiKey
+  apiKey,
+  dangerouslyAllowBrowser: true
 });
 
 await groq.chat.completions.create({
@@ -59,7 +60,8 @@ export async function analyzeImage(file: File, customKey?: string): Promise<stri
   const apiKey = getApiKey(customKey);
   if (!apiKey) throw new Error("Groq API key is missing.");
 const groq = new Groq({
-  apiKey
+  apiKey,
+  dangerouslyAllowBrowser: true
 });
 
 const completion = await groq.chat.completions.create({
@@ -180,9 +182,10 @@ Answer clearly and professionally.
 
 try {
 
-  const groq = new Groq({
-    apiKey
-  });
+ const groq = new Groq({
+  apiKey,
+  dangerouslyAllowBrowser: true
+});
 
   const completion = await groq.chat.completions.create({
     model: "llama3-8b-8192",
