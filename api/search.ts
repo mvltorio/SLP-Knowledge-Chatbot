@@ -1,6 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient } from '@supabase/supabase-js'
-import { GoogleGenAI } from "@google/genai"
 
 const supabase = createClient(
   process.env.SUPABASE_URL!,
@@ -10,34 +9,16 @@ const supabase = createClient(
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
 
-const { query, limit = 6 } = req.body
+    const { limit = 6 } = req.body
 
-if (!query) {
-  return res.status(400).json({ error: "Query is required" })
-}
-
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY
-})
-
-    // Generate embedding for user query
-    const embeddingResponse = await ai.models.embedContent({
-      model: "embedding-004",
-      contents: query
-    })
-
-    const embedding = (embeddingResponse as any).embedding.values
-
-    // Search similar documents
-    const { data, error } = await supabase.rpc("match_documents", {
-      query_embedding: embedding,
-      match_threshold: 0.70,
-      match_count: limit
-    })
+    const { data, error } = await supabase
+      .from('documents')
+      .select('*')
+      .limit(limit)
 
     if (error) {
       console.error(error)
-      return res.status(500).json({ error: "Vector search failed" })
+      return res.status(500).json({ error: "Database query failed" })
     }
 
     res.status(200).json(data)
