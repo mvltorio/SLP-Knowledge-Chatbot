@@ -1,5 +1,4 @@
 import Groq from "groq-sdk";
-import { findRelevantDocs } from "../../lib/vectorSearch";
 import { ChartSpec } from "../types";
 
 const getApiKey = (customKey?: string) => {
@@ -11,7 +10,7 @@ const getApiKey = (customKey?: string) => {
     const envKey = import.meta.env.VITE_GROQ_API_KEY;
 
   if (!envKey) {
-    throw new Error("Gemini API key missing in environment variables.");
+    throw new Error("Groq API key missing in environment variables.");
   }
 
   return envKey;
@@ -36,7 +35,7 @@ export interface KnowledgeDocument {
   type: string;
 }
 
-export async function validateApiKey(key: string): Promise<boolean> {
+export async function validateApiKey(): Promise<boolean> {
   try {
     const apiKey = getApiKey();
     if (!apiKey) return false;
@@ -86,7 +85,7 @@ export async function generateContent(
 
   const apiKey = getApiKey(customKey);
   if (!apiKey) {
-    throw new Error("Gemini API Key is missing. Please configure it in the sidebar.");
+   throw new Error("Groq API key is missing.");
   }
   // ===============================
   // RAG SEARCH
