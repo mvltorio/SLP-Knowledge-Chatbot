@@ -1,4 +1,4 @@
-import { GoogleGenAI, Part, Type } from "@google/genai";
+import Groq from "groq-sdk";
 import { findRelevantDocs } from "../../lib/vectorSearch";
 import { ChartSpec } from "../types";
 
@@ -8,7 +8,7 @@ const getApiKey = (customKey?: string) => {
     return customKey;
   }
 
-  const envKey = import.meta.env.VITE_GEMINI_API_KEY;
+    const envKey = import.meta.env.VITE_GROQ_API_KEY;
 
   if (!envKey) {
     throw new Error("Gemini API key missing in environment variables.");
@@ -17,49 +17,6 @@ const getApiKey = (customKey?: string) => {
   return envKey;
 
 };
-
-const chartSchema = {
-  type: Type.OBJECT,
-  properties: {
-    chartType: {
-      type: Type.STRING,
-      enum: ['bar', 'line', 'pie'],
-      description: 'The type of chart to display.'
-    },
-    data: {
-      type: Type.ARRAY,
-      description: 'The data for the chart.',
-      items: {
-        type: Type.OBJECT,
-        properties: {
-          name: { type: Type.STRING, description: 'The label for this data point.' },
-          value: { type: Type.NUMBER, description: 'The value for this data point.' },
-        },
-        required: ['name', 'value']
-      }
-    },
-    title: { type: Type.STRING, description: 'The title of the chart.' },
-    dataKey: { type: Type.STRING, description: 'The key in the data objects that holds the value for bar/line charts.' }
-  },
-  required: ['chartType', 'data']
-};
-
-// Converts an image File object to a GoogleGenerativeAI.Part object.
-async function imageFileToGenerativePart(file: File): Promise<Part> {
-  const base64EncodedData = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-
-  return {
-    inlineData: {
-      data: base64EncodedData,
-      mimeType: file.type,
-    },
-  };
-}
 
 // Reads a text File object and returns its content as a string.
 async function textFileToString(file: File): Promise<string> {
@@ -83,12 +40,15 @@ export async function validateApiKey(key: string): Promise<boolean> {
   try {
     const apiKey = getApiKey();
     if (!apiKey) return false;
-    const ai = new GoogleGenAI({ apiKey });
-    await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
-      contents: 'hi',
-      config: { maxOutputTokens: 1 }
-    });
+const groq = new Groq({
+  apiKey
+});
+
+await groq.chat.completions.create({
+  model: "llama3-8b-8192",
+  messages: [{ role: "user", content: "hi" }],
+  max_tokens: 1
+});
     return true;
   } catch (error) {
     console.error("API Key Validation Error:", error);
@@ -98,21 +58,22 @@ export async function validateApiKey(key: string): Promise<boolean> {
 
 export async function analyzeImage(file: File, customKey?: string): Promise<string> {
   const apiKey = getApiKey(customKey);
-  if (!apiKey) throw new Error("Gemini API Key is missing. Please configure it in the sidebar.");
+  if (!apiKey) throw new Error("Groq API key is missing.");
+const groq = new Groq({
+  apiKey
+});
 
-  const ai = new GoogleGenAI({ apiKey });
-  const part = await imageFileToGenerativePart(file);
-  const response = await ai.models.generateContent({
-    model: 'gemini-2.0-flash',
-    contents: {
-      parts: [
-        { text: "Describe this image in detail, including any text you see. If it's a document, extract all the text accurately." },
-        part
-      ]
+const completion = await groq.chat.completions.create({
+  model: "llama3-8b-8192",
+  messages: [
+    {
+      role: "user",
+      content: "Describe this image in detail including any visible text."
     }
-  });
-  
-  return response.text || "[No description generated]";
+  ]
+});
+
+return completion.choices?.[0]?.message?.content || "[No description generated]";
 }
 
 export async function generateContent(
@@ -127,15 +88,6 @@ export async function generateContent(
   if (!apiKey) {
     throw new Error("Gemini API Key is missing. Please configure it in the sidebar.");
   }
-
-  const ai = new GoogleGenAI({ apiKey });
-
-  const imageParts = await Promise.all(
-    currentFiles
-      .filter(file => file.type.startsWith('image/'))
-      .map(imageFileToGenerativePart)
-  );
-
   // ===============================
   // RAG SEARCH
   // ===============================
@@ -227,70 +179,46 @@ Answer clearly and professionally.
 
 `.trim();
 
+try {
 
-  const textPart = { text: combinedText };
+  const groq = new Groq({
+    apiKey
+  });
 
-  const contents = {
-    parts: [textPart, ...imageParts]
+  const completion = await groq.chat.completions.create({
+    model: "llama3-8b-8192",
+    messages: [
+      {
+        role: "system",
+        content: "You are the SLP Knowledge Chatbot."
+      },
+      {
+        role: "user",
+        content: combinedText
+      }
+    ],
+    temperature: 0.2
+  });
+
+  const responseText = completion.choices?.[0]?.message?.content || "";
+
+  if (!responseText) {
+    return { text: "The AI returned an empty response." };
+  }
+
+  return {
+    text: responseText
   };
 
+}
+catch (error: any) {
 
-  try {
+  console.error("Groq API Error:", error);
 
-const response = await ai.models.generateContent({
-  model: 'gemini-2.0-flash',
-  contents: contents,
-  config: {
-    responseMimeType: 'application/json',
-    responseSchema: {
-      type: Type.OBJECT,
-      properties: {
-        text: {
-          type: Type.STRING,
-          description: 'The textual response to the user.'
-        },
-        chart: {
-          ...chartSchema,
-          description: 'Chart visualization if needed.'
-        },
-        fileDownload: {
-          type: Type.OBJECT,
-          properties: {
-            id: { type: Type.NUMBER },
-            name: { type: Type.STRING }
-          }
-        }
-      },
-      required: ['text']
-    }
-  }
-});
-    const responseText = response.text;
+  return {
+    text: "There was an error generating the AI response."
+  };
 
-    if (!responseText) {
-      return { text: "The AI returned an empty response." };
-    }
-
-    const parsed = JSON.parse(responseText);
-
-    return {
-      text: parsed.text || "Process completed.",
-      chart: parsed.chart,
-      fileDownload: parsed.fileDownload
-    };
-
-  } catch (error: any) {
-
-    console.error("Gemini API Error:", error);
-
-    if (error instanceof SyntaxError) {
-      return {
-        text: "There was an error parsing the AI response."
-      };
-    }
-
-    throw error;
-
-  }
+}
 
 }
