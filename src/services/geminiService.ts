@@ -136,7 +136,7 @@ export async function generateContent(
 Document: ${doc.name}
 Category: ${doc.category}
 
-${doc.content.slice(0,800)}
+${doc.content.slice(0,5000)}
 `)
     .join("\n\n---\n\n");
 
