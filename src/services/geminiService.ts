@@ -1,20 +1,21 @@
 import Groq from "groq-sdk";
 import { ChartSpec } from "../types";
 
-const getApiKey = (customKey?: string) => {
+// Use a currently supported model
+const SUPPORTED_MODEL = "llama-3.1-8b-instant"; // or "llama3-70b-8192" or "mixtral-8x7b-32768"
 
+const getApiKey = (customKey?: string) => {
   if (customKey && customKey.length > 20) {
     return customKey;
   }
 
-    const envKey = import.meta.env.VITE_GROQ_API_KEY;
+  const envKey = import.meta.env.VITE_GROQ_API_KEY;
 
   if (!envKey) {
     throw new Error("Groq API key missing in environment variables.");
   }
 
   return envKey;
-
 };
 
 // Reads a text File object and returns its content as a string.
@@ -39,16 +40,17 @@ export async function validateApiKey(): Promise<boolean> {
   try {
     const apiKey = getApiKey();
     if (!apiKey) return false;
-const groq = new Groq({
-  apiKey,
-  dangerouslyAllowBrowser: true
-});
+    
+    const groq = new Groq({
+      apiKey,
+      dangerouslyAllowBrowser: true
+    });
 
-await groq.chat.completions.create({
-  model: "llama3-8b-8192",
-  messages: [{ role: "user", content: "hi" }],
-  max_tokens: 1
-});
+    await groq.chat.completions.create({
+      model: SUPPORTED_MODEL, // Updated model
+      messages: [{ role: "user", content: "hi" }],
+      max_tokens: 1
+    });
     return true;
   } catch (error) {
     console.error("API Key Validation Error:", error);
@@ -59,22 +61,27 @@ await groq.chat.completions.create({
 export async function analyzeImage(file: File, customKey?: string): Promise<string> {
   const apiKey = getApiKey(customKey);
   if (!apiKey) throw new Error("Groq API key is missing.");
-const groq = new Groq({
-  apiKey,
-  dangerouslyAllowBrowser: true
-});
+  
+  const groq = new Groq({
+    apiKey,
+    dangerouslyAllowBrowser: true
+  });
 
-const completion = await groq.chat.completions.create({
-  model: "llama3-8b-8192",
-  messages: [
-    {
-      role: "user",
-      content: "Describe this image in detail including any visible text."
-    }
-  ]
-});
+  // Note: For image analysis, you'll need to use a multimodal model
+  // Currently, Groq doesn't support direct image analysis
+  // You might need a different approach or service for this
+  
+  const completion = await groq.chat.completions.create({
+    model: SUPPORTED_MODEL, // Updated model
+    messages: [
+      {
+        role: "user",
+        content: "Describe this image in detail including any visible text."
+      }
+    ]
+  });
 
-return completion.choices?.[0]?.message?.content || "[No description generated]";
+  return completion.choices?.[0]?.message?.content || "[No description generated]";
 }
 
 export async function generateContent(
@@ -87,8 +94,9 @@ export async function generateContent(
 
   const apiKey = getApiKey(customKey);
   if (!apiKey) {
-   throw new Error("Groq API key is missing.");
+    throw new Error("Groq API key is missing.");
   }
+  
   // ===============================
   // RAG SEARCH
   // ===============================
@@ -96,7 +104,6 @@ export async function generateContent(
   let relevantDocs: KnowledgeDocument[] = [];
 
   try {
-
     const searchRes = await fetch('/api/search', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -106,7 +113,6 @@ export async function generateContent(
     if (searchRes.ok) {
       relevantDocs = await searchRes.json();
     }
-
   } catch (error) {
     console.error("RAG search failed:", error);
   }
@@ -116,11 +122,9 @@ export async function generateContent(
   // ===============================
 
   if (!relevantDocs || relevantDocs.length === 0) {
-
     relevantDocs = knowledgeBase
       .filter(doc => doc.content && doc.content.length > 50)
       .slice(0, 5);
-
   }
 
   // ===============================
@@ -128,20 +132,18 @@ export async function generateContent(
   // ===============================
 
   const fileContext = relevantDocs
-  .map(doc => `
+    .map(doc => `
 Document: ${doc.name}
 Category: ${doc.category}
 
 ${doc.content.slice(0,800)}
 `)
-  .join("\n\n---\n\n");
-
+    .join("\n\n---\n\n");
 
   const historyContext = chatHistory
     .slice(-5)
     .map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.text}`)
     .join('\n');
-
 
   const combinedText = `
 
@@ -180,47 +182,49 @@ Answer clearly and professionally.
 
 `.trim();
 
-try {
+  try {
+    const groq = new Groq({
+      apiKey,
+      dangerouslyAllowBrowser: true
+    });
 
- const groq = new Groq({
-  apiKey,
-  dangerouslyAllowBrowser: true
-});
+    const completion = await groq.chat.completions.create({
+      model: SUPPORTED_MODEL, // Updated model
+      messages: [
+        {
+          role: "system",
+          content: "You are the SLP Knowledge Chatbot."
+        },
+        {
+          role: "user",
+          content: combinedText
+        }
+      ],
+      temperature: 0.2
+    });
 
-  const completion = await groq.chat.completions.create({
-    model: "llama3-8b-8192",
-    messages: [
-      {
-        role: "system",
-        content: "You are the SLP Knowledge Chatbot."
-      },
-      {
-        role: "user",
-        content: combinedText
-      }
-    ],
-    temperature: 0.2
-  });
+    const responseText = completion.choices?.[0]?.message?.content || "";
 
-  const responseText = completion.choices?.[0]?.message?.content || "";
+    if (!responseText) {
+      return { text: "The AI returned an empty response." };
+    }
 
-  if (!responseText) {
-    return { text: "The AI returned an empty response." };
+    return {
+      text: responseText
+    };
   }
-
-  return {
-    text: responseText
-  };
-
-}
-catch (error: any) {
-
-  console.error("Groq API Error:", error);
-
-  return {
-    text: "There was an error generating the AI response."
-  };
-
-}
-
+  catch (error: any) {
+    console.error("Groq API Error:", error);
+    
+    // Provide more specific error message
+    if (error?.error?.code === "model_decommissioned") {
+      return { 
+        text: "The AI model is outdated. Please contact the administrator to update the model configuration." 
+      };
+    }
+    
+    return {
+      text: "There was an error generating the AI response."
+    };
+  }
 }
