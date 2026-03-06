@@ -124,7 +124,7 @@ export async function generateContent(
   if (!relevantDocs || relevantDocs.length === 0) {
     relevantDocs = knowledgeBase
       .filter(doc => doc.content && doc.content.length > 50)
-      .slice(0, 5);
+      .slice(0, 12);
   }
 
   // ===============================
