@@ -2,30 +2,32 @@ import { createClient } from "@supabase/supabase-js";
 
 export default async function handler(req: any, res: any) {
 
-  const path = req.url || "";
+  if (req.method !== "POST") {
+    return res.status(405).json({ message: "Method not allowed" });
+  }
+
+  const { action, email, password } = req.body;
 
   try {
 
-    // ================= LOGIN =================
-    if (path.includes("/login")) {
+    // LOGIN
+    if (action === "login") {
 
       const supabase = createClient(
         process.env.SUPABASE_URL!,
         process.env.SUPABASE_ANON_KEY!
       );
 
-      const { email, password } = req.body;
-
-      const { data: authData, error: authError } =
+      const { data: authData, error } =
         await supabase.auth.signInWithPassword({
           email,
           password,
         });
 
-      if (authError || !authData.user) {
+      if (error || !authData.user) {
         return res.status(400).json({
           success: false,
-          message: authError?.message || "Invalid login credentials.",
+          message: error?.message || "Invalid credentials",
         });
       }
 
@@ -35,39 +37,26 @@ export default async function handler(req: any, res: any) {
         .eq("id", authData.user.id)
         .single();
 
-      if (!userData) {
-        return res.status(404).json({
-          success: false,
-          message: "User record not found.",
-        });
-      }
-
-      if (userData.status !== "approved") {
+      if (!userData || userData.status !== "approved") {
         return res.status(403).json({
           success: false,
-          message: "Your account is still waiting for admin approval.",
+          message: "Account not approved by admin.",
         });
       }
 
       return res.status(200).json({
         success: true,
-        user: {
-          email: userData.email,
-          role: userData.role,
-        },
+        user: userData
       });
-
     }
 
-    // ================= REGISTER =================
-    if (path.includes("/register")) {
+    // REGISTER
+    if (action === "register") {
 
       const supabase = createClient(
         process.env.SUPABASE_URL!,
         process.env.SUPABASE_SERVICE_ROLE_KEY!
       );
-
-      const { email, password } = req.body;
 
       const { data, error } = await supabase.auth.admin.createUser({
         email,
@@ -78,7 +67,7 @@ export default async function handler(req: any, res: any) {
       if (error || !data.user) {
         return res.status(400).json({
           success: false,
-          message: error?.message || "Registration failed",
+          message: error?.message || "Registration failed"
         });
       }
 
@@ -86,17 +75,16 @@ export default async function handler(req: any, res: any) {
         id: data.user.id,
         email,
         role: "user",
-        status: "pending",
+        status: "pending"
       });
 
       return res.status(200).json({
         success: true,
-        message: "Registration successful. Waiting for admin approval."
+        message: "Registration successful. Awaiting admin approval."
       });
-
     }
 
-    return res.status(404).json({ message: "Auth route not found" });
+    return res.status(400).json({ message: "Invalid action" });
 
   } catch (err: any) {
 
