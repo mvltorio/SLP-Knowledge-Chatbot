@@ -110,7 +110,7 @@ export default function App() {
     setAuthMessage('');
 
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await fetch('/api/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: authEmail, password: authPassword })
@@ -142,7 +142,7 @@ export default function App() {
     e.preventDefault();
     setAuthMessage('');
     try {
-      const res = await fetch('/api/auth/register', {
+      const res = await fetch('/api/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: authEmail, password: authPassword })
