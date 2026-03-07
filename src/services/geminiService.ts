@@ -758,34 +758,33 @@ export async function generateContent(
                       prompt.toLowerCase().includes('search') ||
                       prompt.toLowerCase().includes('proposal') ||
                       prompt.toLowerCase().includes('document') ||
-                      prompt.toLowerCase().includes('about');
+                      prompt.toLowerCase().includes('about'); 
+                      let context = `DOCUMENT CONTENT FROM USER FILES:\n\n`;
   
-  if (needsSearch) {
-    const searchResults = await searchDocuments(knowledgeBase, prompt);
-    
-    if (searchResults.length > 0) {
-      let response = `## 🔍 Search Results\n\n`;
-      response += `Found ${searchResults.length} relevant documents:\n\n`;
-      
-      searchResults.forEach((result, index) => {
-        response += `### ${index + 1}. ${result.fileName}\n`;
-        response += `**Relevance:** ${result.relevance}\n`;
-        response += `**Summary:** ${result.summary}\n\n`;
-        
-        if (result.excerpts.length > 0) {
-          response += `**Excerpts:**\n`;
-          result.excerpts.forEach(excerpt => {
-            response += `> "${excerpt}"\n\n`;
-          });
-        }
-        
-        response += `*To get a copy: \`Get copy of ${result.fileName}\`*\n\n`;
-        response += `---\n\n`;
-      });
-      
-      return { text: response };
-    }
+if (needsSearch) {
+
+  const searchResults = await searchDocuments(knowledgeBase, prompt);
+
+  if (searchResults.length > 0) {
+
+    context += "\n\nSEARCH RESULTS FROM DOCUMENTS:\n\n";
+
+    searchResults.forEach((result) => {
+      context += `FILE: ${result.fileName}\n`;
+      context += `SUMMARY: ${result.summary}\n`;
+
+      if (result.excerpts.length > 0) {
+        result.excerpts.forEach(excerpt => {
+          context += `EXCERPT: ${excerpt}\n`;
+        });
+      }
+
+      context += "\n";
+    });
+
   }
+
+}
   
 // Build context using REAL document content
 let context = `DOCUMENT CONTENT FROM USER FILES:\n\n`;
