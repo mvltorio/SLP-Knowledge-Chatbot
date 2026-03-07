@@ -31,7 +31,7 @@ async function readFileContent(file: File): Promise<string> {
 export interface KnowledgeDocument {
   id?: number;
   name: string;
-  category: string; // This is the FOLDER NAME!
+  category: string;
   content: string;
   type: string;
 }
@@ -41,11 +41,11 @@ export interface KnowledgeDocument {
 interface FileAnalysis {
   fileName: string;
   fileType: 'csv' | 'word' | 'pdf' | 'unknown';
-  category: string; // Add category
+  category: string;
   summary: string;
-  keyPoints: string[]; // Extract key points instead of full content
+  keyPoints: string[];
   topics: Set<string>;
-  fullContent?: string; // Make optional to save tokens
+  fullContent?: string;
 }
 
 interface KnowledgeBase {
@@ -53,7 +53,7 @@ interface KnowledgeBase {
   statistics: {
     totalFiles: number;
     fileTypes: Map<string, number>;
-    categories: Map<string, number>; // Track categories/folders
+    categories: Map<string, number>;
   };
   searchIndex: Map<string, Set<string>>;
 }
@@ -65,6 +65,7 @@ interface DocumentSearchResult {
   keyPoints: string[];
   matchedTerms: string[];
   fileType: string;
+  relevantSections?: string[]; // Store full relevant sections
 }
 
 // ==================== UTILITY FUNCTIONS ====================
@@ -93,24 +94,52 @@ function extractKeyPoints(content: string, maxPoints: number = 5): string[] {
   return points;
 }
 
+// Extract full sections around keywords
+function extractRelevantSections(content: string, keywords: Set<string>, maxSections: number = 3): string[] {
+  const sections: string[] = [];
+  const paragraphs = content.split('\n\n');
+  
+  for (const para of paragraphs) {
+    if (sections.length >= maxSections) break;
+    
+    const paraLower = para.toLowerCase();
+    let matches = 0;
+    
+    keywords.forEach(keyword => {
+      if (paraLower.includes(keyword)) {
+        matches++;
+      }
+    });
+    
+    // If paragraph contains at least one keyword and is not too long
+    if (matches > 0 && para.length < 1000) {
+      sections.push(para);
+    }
+  }
+  
+  return sections;
+}
+
 // ==================== DOCUMENT ANALYSIS ====================
 
 function analyzeWordDocument(doc: KnowledgeDocument): FileAnalysis {
   const content = doc.content;
   
-  // Extract key points instead of storing full content
+  // Extract key points
   const keyPoints = extractKeyPoints(content, 5);
   
   // Auto-detect topics
   const topics = new Set<string>();
   const topicPatterns = [
     /\b(proposal|project|program|initiative)\b/gi,
-    /\b(fish|aquaculture|tilapia|fishing)\b/gi,
+    /\b(fish|aquaculture|tilapia|fishing|vending)\b/gi,
     /\b(farming|agriculture)\b/gi,
     /\b(livelihood|enterprise|business)\b/gi,
     /\b(seed capital|scf|fund)\b/gi,
     /\b(pantawid|4ps)\b/gi,
-    /\b(slpa|association)\b/gi
+    /\b(slpa|association)\b/gi,
+    /\b(phase|punla|usbong|tuklas|sibol|anihan)\b/gi,
+    /\b(guidelines|mc|circular)\b/gi
   ];
   
   topicPatterns.forEach(pattern => {
@@ -130,7 +159,7 @@ function analyzeWordDocument(doc: KnowledgeDocument): FileAnalysis {
     summary: content.substring(0, 200).replace(/\n/g, ' ') + '...',
     keyPoints,
     topics,
-    fullContent: content // Keep full content but will use selectively
+    fullContent: content
   };
 }
 
@@ -244,9 +273,8 @@ async function searchDocuments(
   
   // Special handling for common terms
   const isProposalQuery = queryLower.includes('proposal');
-  const isFishQuery = queryLower.includes('fish') || queryLower.includes('tilapia') || queryLower.includes('aquaculture');
-  const isSLPAQuery = queryLower.includes('slpa') || queryLower.includes('association');
-  const isPantawidQuery = queryLower.includes('pantawid') || queryLower.includes('4ps');
+  const isFishQuery = queryLower.includes('fish') || queryLower.includes('tilapia') || queryLower.includes('aquaculture') || queryLower.includes('vending');
+  const isPhaseQuery = queryLower.includes('phase') || queryLower.includes('punla') || queryLower.includes('usbong') || queryLower.includes('tuklas') || queryLower.includes('sibol') || queryLower.includes('anihan');
   
   kb.files.forEach((file: FileAnalysis) => {
     const doc = knowledgeBase.find(d => d.name === file.fileName);
@@ -254,7 +282,7 @@ async function searchDocuments(
     
     let relevance = 0;
     const matchedTerms: string[] = [];
-    let keyPoints: string[] = [];
+    const relevantSections: string[] = [];
     
     // ===== CATEGORY/FOLDER MATCHING (HIGHEST PRIORITY) =====
     const categoryLower = file.category.toLowerCase();
@@ -265,14 +293,14 @@ async function searchDocuments(
       matchedTerms.push('📁 IN PROPOSAL FOLDER');
     }
     
-    if (isFishQuery && (categoryLower.includes('fish') || categoryLower.includes('aqua'))) {
+    if (isFishQuery && (categoryLower.includes('fish') || categoryLower.includes('aqua') || categoryLower.includes('proposal'))) {
       relevance += 200;
-      matchedTerms.push('📁 IN FISH/FISHERY FOLDER');
+      matchedTerms.push('📁 IN FISH/PROPOSAL FOLDER');
     }
     
-    if (isPantawidQuery && categoryLower.includes('pantawid')) {
+    if (isPhaseQuery && categoryLower.includes('guideline')) {
       relevance += 200;
-      matchedTerms.push('📁 IN PANTAWID FOLDER');
+      matchedTerms.push('📁 IN GUIDELINES FOLDER');
     }
     
     // Check each query keyword against category
@@ -290,29 +318,34 @@ async function searchDocuments(
       if (contentLower.includes(keyword)) {
         relevance += 20;
         matchedTerms.push(keyword);
-        
-        // Extract relevant key points
-        if (keyPoints.length < 3) {
-          const lines = doc.content.split('\n');
-          for (const line of lines) {
-            if (line.toLowerCase().includes(keyword) && line.length < 200) {
-              keyPoints.push(line.trim());
-              break;
-            }
-          }
-        }
       }
     });
     
-    // Special matching for fish proposals
-    if (isProposalQuery && isFishQuery && relevance > 0) {
-      relevance += 100; // Boost fish proposals
-      matchedTerms.push('🐟 FISH PROPOSAL');
+    // Extract full relevant sections for phase queries
+    if (isPhaseQuery) {
+      const phaseKeywords = new Set(['phase', 'punla', 'usbong', 'tuklas', 'sibol', 'anihan']);
+      const sections = extractRelevantSections(doc.content, phaseKeywords, 5);
+      if (sections.length > 0) {
+        relevance += 50;
+        relevantSections.push(...sections);
+      }
     }
     
-    // If no key points found, use file's key points
-    if (keyPoints.length === 0) {
-      keyPoints = file.keyPoints;
+    // For fish proposal queries, find all fish-related proposals
+    if (isFishQuery && isProposalQuery && (file.category.toLowerCase().includes('proposal') || file.fileName.toLowerCase().includes('fish'))) {
+      relevance += 100;
+      
+      // Extract business details
+      const lines = doc.content.split('\n');
+      for (const line of lines) {
+        if (line.toLowerCase().includes('seed capital') || 
+            line.toLowerCase().includes('scf') ||
+            line.toLowerCase().includes('amount') ||
+            line.toLowerCase().includes('business') ||
+            line.toLowerCase().includes('enterprise')) {
+          relevantSections.push(line);
+        }
+      }
     }
     
     if (relevance > 0) {
@@ -320,9 +353,10 @@ async function searchDocuments(
         fileName: doc.name,
         category: file.category,
         relevance,
-        keyPoints: keyPoints.slice(0, 3),
-        matchedTerms: Array.from(new Set(matchedTerms)).slice(0, 5),
-        fileType: file.fileType
+        keyPoints: file.keyPoints,
+        matchedTerms: Array.from(new Set(matchedTerms)).slice(0, 8),
+        fileType: file.fileType,
+        relevantSections: relevantSections.slice(0, 5)
       });
     }
   });
@@ -394,80 +428,96 @@ async function generateResponse(
   groq: Groq
 ): Promise<string> {
   
-  // Build a concise context
+  // Build a comprehensive context with FULL details
   let context = `USER QUESTION: ${prompt}\n\n`;
-  context += `RELEVANT DOCUMENTS (from search):\n\n`;
+  context += `RELEVANT DOCUMENTS (with full details):\n\n`;
   
-  // Add only the most relevant documents (max 3 to save tokens)
-  const topResults = searchResults.slice(0, 3);
+  // Add all relevant documents with their full relevant sections
+  const topResults = searchResults.slice(0, 5); // Include up to 5 documents
   
   for (let i = 0; i < topResults.length; i++) {
     const result = topResults[i];
     const doc = knowledgeBase.find(d => d.name === result.fileName);
     
-    context += `DOCUMENT ${i + 1}: ${result.fileName}\n`;
-    context += `FOLDER/CATEGORY: ${result.category}\n`;
-    context += `RELEVANCE SCORE: ${result.relevance}\n`;
-    context += `KEY POINTS:\n`;
-    result.keyPoints.forEach(point => context += `- ${point}\n`);
+    if (!doc) continue;
     
-    // Add relevant excerpt from the document
-    if (doc) {
-      // Find paragraphs containing query terms
+    context += `========== DOCUMENT ${i + 1}: ${result.fileName} ==========\n`;
+    context += `FOLDER/CATEGORY: ${result.category}\n`;
+    context += `RELEVANCE: ${result.relevance}\n\n`;
+    
+    // If we have extracted relevant sections, use them
+    if (result.relevantSections && result.relevantSections.length > 0) {
+      context += `RELEVANT SECTIONS:\n`;
+      result.relevantSections.forEach((section, idx) => {
+        context += `\n--- Section ${idx + 1} ---\n${section}\n`;
+      });
+    } else {
+      // Otherwise, find and extract relevant sections based on the query
       const queryTerms = extractKeywords(prompt);
       const paragraphs = doc.content.split('\n\n');
-      let relevantPara = '';
+      let relevantCount = 0;
       
       for (const para of paragraphs) {
+        if (relevantCount >= 5) break;
+        
         const paraLower = para.toLowerCase();
         let matches = 0;
+        
         queryTerms.forEach(term => {
           if (paraLower.includes(term)) matches++;
         });
-        if (matches >= 1 && para.length < 500) {
-          relevantPara = para;
-          break;
+        
+        // If paragraph contains query terms or is about phases/proposals
+        if (matches > 0 || 
+            (prompt.toLowerCase().includes('phase') && paraLower.includes('phase')) ||
+            (prompt.toLowerCase().includes('proposal') && paraLower.includes('seed capital'))) {
+          context += `\n--- Relevant Excerpt ---\n${para}\n`;
+          relevantCount++;
         }
-      }
-      
-      if (relevantPara) {
-        context += `RELEVANT EXCERPT: ${relevantPara.substring(0, 300)}...\n`;
       }
     }
     
-    context += '\n';
+    // Also include key points as summary
+    context += `\nKEY POINTS:\n`;
+    result.keyPoints.forEach(point => {
+      context += `- ${point}\n`;
+    });
+    
+    context += `\n${'='.repeat(50)}\n\n`;
   }
   
   if (topResults.length === 0) {
     context += "No relevant documents found.\n";
   }
   
-  // Use Groq to generate answer
+  // Use Groq to generate a detailed answer
   const completion = await groq.chat.completions.create({
     model: PRIMARY_MODEL,
     messages: [
       {
         role: "system",
-        content: `You are an AI assistant that answers questions based ONLY on the provided documents.
+        content: `You are an AI assistant that provides DETAILED answers based ONLY on the provided documents.
 
 IMPORTANT RULES:
 1. ONLY use information from the documents shown above
-2. Pay attention to FOLDER/CATEGORY names - they tell you what type of document it is
-3. If a document is in a "proposal" folder, it IS a proposal even if filename doesn't say it
-4. If a document is in a "fish" folder, it IS about fish
-5. Be specific - mention which document the information comes from
-6. If information is not in the documents, say "I cannot find that information"
-7. Keep responses concise and focused on answering the question
+2. Provide COMPLETE and DETAILED answers - don't summarize, include all relevant information
+3. Pay attention to FOLDER/CATEGORY names - they tell you what type of document it is
+4. If a document is in a "proposal" folder, it IS a proposal even if filename doesn't say it
+5. List ALL relevant documents, not just one
+6. For phase questions (Punla, Usbong, etc.), extract ALL details about that phase from the guidelines
+7. For proposal questions, list ALL proposals that match the criteria with their details
+8. Be specific - include exact amounts, dates, and descriptions from the documents
+9. If information is not in the documents, say "I cannot find that information"
 
-The documents are shown above with their folder/category names.`
+The documents are shown above with their full content. Read them carefully and provide comprehensive answers.`
       },
       {
         role: "user",
-        content: `QUESTION: ${prompt}\n\nDOCUMENTS:\n${context}\n\nAnswer based ONLY on these documents:`
+        content: `QUESTION: ${prompt}\n\nDOCUMENTS:\n${context}\n\nProvide a DETAILED answer based ONLY on these documents. Include ALL relevant information found:`
       }
     ],
     temperature: 0.1,
-    max_tokens: 800 // Reduced to avoid token limits
+    max_tokens: 2000 // Increased for more detailed responses
   });
 
   return completion.choices?.[0]?.message?.content || "No answer generated.";
@@ -539,7 +589,8 @@ export async function generateContent(
       file: r.fileName,
       category: r.category,
       relevance: r.relevance,
-      terms: r.matchedTerms
+      terms: r.matchedTerms,
+      sections: r.relevantSections?.length || 0
     })));
     
     // If no results found
@@ -555,7 +606,7 @@ export async function generateContent(
       dangerouslyAllowBrowser: true
     });
     
-    // Generate response
+    // Generate detailed response
     const answer = await generateResponse(prompt, searchResults, knowledgeBase, groq);
     
     return { text: answer };
@@ -565,24 +616,20 @@ export async function generateContent(
     
     // Handle token limit error
     if (error.status === 413 || (error.error && error.error.code === 'rate_limit_exceeded')) {
-      // We need to get searchResults again since it's out of scope
       try {
-        // Re-analyze and search to get results for the error message
         const kb = await analyzeAllFiles(knowledgeBase);
         const errorSearchResults = await searchDocuments(knowledgeBase, prompt, kb);
         
         if (errorSearchResults.length > 0) {
           return {
-            text: "The response was too large. I'll try to be more concise.\n\n" +
-                  "Based on your question, here are the relevant files:\n\n" +
-                  errorSearchResults.map(r => `📄 ${r.fileName} (${r.category})\n  - ${r.keyPoints[0] || 'No preview'}`).join('\n\n') +
-                  "\n\nYou can ask for a specific file: 'copy of [filename]'"
+            text: "The response was too large. Here are the relevant files:\n\n" +
+                  errorSearchResults.map(r => `📄 **${r.fileName}** (${r.category})\n  ${r.keyPoints[0] || ''}\n  *Relevance: ${r.relevance}*\n`).join('\n') +
+                  "\n\nYou can ask for a specific file: 'copy of [filename]' to see its full content."
           };
         }
       } catch (e) {
-        // If re-search fails, show generic message
         return {
-          text: "The response was too large. Please try a more specific question or ask for a specific file."
+          text: "The response was too large. Please try a more specific question."
         };
       }
     }
