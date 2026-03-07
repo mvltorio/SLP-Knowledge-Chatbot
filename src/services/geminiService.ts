@@ -63,6 +63,7 @@ interface FileAnalysis {
   keyFindings: string[];
   topics: Set<string>; // Auto-detected topics from content
   entities: Map<string, Set<string>>; // Named entities found
+  fullContent: string; // Store full content for answering questions
 }
 
 interface KnowledgeBase {
@@ -293,7 +294,8 @@ function analyzeWordDocument(doc: KnowledgeDocument): FileAnalysis {
       `Topics detected: ${Array.from(topics).slice(0, 5).join(', ')}`
     ],
     topics,
-    entities
+    entities,
+    fullContent: content // Store full content for answering questions
   };
   
   return analysis;
@@ -334,7 +336,8 @@ async function analyzeAllFiles(knowledgeBase: KnowledgeDocument[]): Promise<Know
         summary: `CSV with ${rows.length} rows, ${headers.length} columns`,
         keyFindings: [],
         topics: new Set(),
-        entities: new Map()
+        entities: new Map(),
+        fullContent: doc.content // Store full content
       };
       
       kb.statistics.totalRows += rows.length;
@@ -480,115 +483,6 @@ async function searchDocuments(knowledgeBase: KnowledgeDocument[], query: string
   return results.sort((a, b) => b.relevance - a.relevance);
 }
 
-// ==================== DYNAMIC ANSWER GENERATION ====================
-
-function generateDynamicAnswer(query: string, kb: KnowledgeBase): string {
-  const queryLower = query.toLowerCase();
-  let response = `## 📊 Analysis Based on Your Files\n\n`;
-  
-  // First, identify what the user is asking about
-  const queryKeywords = extractKeywords(query);
-  
-  // Check if query is about counts or statistics
-  const isCountQuery = queryLower.includes('how many') || 
-                       queryLower.includes('count') || 
-                       queryLower.includes('total') ||
-                       queryLower.includes('number of');
-  
-  // Check if query is about finding documents
-  const isFindQuery = queryLower.includes('find') || 
-                      queryLower.includes('search') || 
-                      queryLower.includes('proposal') ||
-                      queryLower.includes('document') ||
-                      queryLower.includes('file');
-  
-  if (isCountQuery) {
-    // Handle count queries dynamically
-    response += `### 🔢 Based on your data:\n\n`;
-    
-    // Look for categorical columns that might match the query
-    kb.dataCategories.forEach((category, name) => {
-      queryKeywords.forEach(keyword => {
-        if (name.includes(keyword) || keyword.includes(name)) {
-          const total = Array.from(category.values.values()).reduce((a, b) => a + b, 0);
-          response += `- **${category.description}**: ${total} records\n`;
-          
-          // Show breakdown if few categories
-          if (category.values.size <= 10) {
-            response += `  Breakdown:\n`;
-            category.values.forEach((count, value) => {
-              response += `  - ${value}: ${count}\n`;
-            });
-          }
-        }
-      });
-    });
-    
-    // If no specific category found, show overall stats
-    if (response === `## 📊 Analysis Based on Your Files\n\n### 🔢 Based on your data:\n\n`) {
-      response += `- **Total files:** ${kb.statistics.totalFiles}\n`;
-      response += `- **Total data rows:** ${kb.statistics.totalRows}\n`;
-      response += `- **CSV files:** ${kb.statistics.fileTypes.get('csv') || 0}\n`;
-      response += `- **Word documents:** ${kb.statistics.fileTypes.get('word') || 0}\n`;
-      
-      // Show all categorical data found
-      if (kb.dataCategories.size > 0) {
-        response += `\n### 📋 Categorical Data Found:\n`;
-        kb.dataCategories.forEach((category, name) => {
-          const total = Array.from(category.values.values()).reduce((a, b) => a + b, 0);
-          response += `- **${name}**: ${total} records\n`;
-        });
-      }
-    }
-  } 
-  else if (isFindQuery) {
-    response += `### 🔍 Search Results\n\n`;
-    response += `I'll search through your documents for "${query}".\n\n`;
-    response += `*Use the searchDocuments function to get specific results.*\n\n`;
-    
-    // Show available document types
-    response += `### 📁 Available Documents:\n`;
-    kb.files.forEach(file => {
-      if (file.fileType === 'word') {
-        response += `- ${file.fileName}\n`;
-        if (file.topics.size > 0) {
-          response += `  Topics: ${Array.from(file.topics).slice(0, 3).join(', ')}\n`;
-        }
-      }
-    });
-  }
-  else {
-    // General summary of what's available
-    response += `### 📁 Files Overview\n`;
-    response += `- **Total files:** ${kb.statistics.totalFiles}\n`;
-    response += `- **Total rows of data:** ${kb.statistics.totalRows.toLocaleString()}\n`;
-    response += `- **Unique columns found:** ${kb.statistics.uniqueColumns.size}\n\n`;
-    
-    if (kb.dataCategories.size > 0) {
-      response += `### 📊 What I Found in Your Data:\n`;
-      kb.dataCategories.forEach((category, name) => {
-        const total = Array.from(category.values.values()).reduce((a, b) => a + b, 0);
-        response += `- **${name}**: ${total} records across ${category.files.length} file(s)\n`;
-        
-        // Show sample values
-        const sampleValues = Array.from(category.values.keys()).slice(0, 5);
-        if (sampleValues.length > 0) {
-          response += `  Examples: ${sampleValues.join(', ')}\n`;
-        }
-      });
-    }
-    
-    if (kb.relationships.length > 0) {
-      response += `\n### 🔗 Related Columns Found:\n`;
-      kb.relationships.slice(0, 5).forEach(rel => {
-        response += `- "${rel.column1}" ↔ "${rel.column2}" (${rel.similarity.toFixed(1)}% similar)\n`;
-      });
-    }
-  }
-  
-  return response;
-}
-
 // ==================== COPY REQUEST HANDLER ====================
 
 async function handleCopyRequest(prompt: string, knowledgeBase: KnowledgeDocument[]): Promise<{ text: string; fileDownload?: any }> {
@@ -672,6 +566,42 @@ async function handleCopyRequest(prompt: string, knowledgeBase: KnowledgeDocumen
   };
 }
 
+// ==================== BUILD CONTEXT FROM DOCUMENTS ====================
+
+function buildContextFromDocuments(knowledgeBase: KnowledgeDocument[], searchResults: DocumentSearchResult[]): string {
+  let context = `DOCUMENT CONTENT FROM USER FILES:\n\n`;
+  
+  // Add all document contents to context
+  knowledgeBase.forEach(doc => {
+    if (doc.name.endsWith('.csv')) {
+      // For CSV files, add a summary
+      context += `FILE: ${doc.name} (CSV)\n`;
+      context += `CONTENT: This is a CSV file with the following data:\n${doc.content.substring(0, 1000)}${doc.content.length > 1000 ? '...' : ''}\n\n`;
+    } else {
+      // For Word documents, add full content (truncated if too long)
+      context += `FILE: ${doc.name}\n`;
+      context += `CONTENT: ${doc.content.substring(0, 3000)}${doc.content.length > 3000 ? '...' : ''}\n\n`;
+    }
+  });
+  
+  // Add search results if available
+  if (searchResults.length > 0) {
+    context += "\n\nRELEVANT SEARCH RESULTS:\n\n";
+    searchResults.forEach((result) => {
+      context += `FILE: ${result.fileName}\n`;
+      context += `SUMMARY: ${result.summary}\n`;
+      if (result.excerpts.length > 0) {
+        result.excerpts.forEach(excerpt => {
+          context += `EXCERPT: ${excerpt}\n`;
+        });
+      }
+      context += "\n";
+    });
+  }
+  
+  return context;
+}
+
 // ==================== EXPORTED FUNCTIONS ====================
 
 export async function validateApiKey(): Promise<boolean> {
@@ -749,8 +679,7 @@ export async function generateContent(
     return await handleCopyRequest(prompt, knowledgeBase);
   }
 
-  // ALWAYS analyze ALL files fresh - this is the key!
-  // The chatbot's brain is rebuilt every time with new files
+  // Analyze all files
   const kb = await analyzeAllFiles(knowledgeBase);
   
   // Check if this is a search query
@@ -758,69 +687,28 @@ export async function generateContent(
                       prompt.toLowerCase().includes('search') ||
                       prompt.toLowerCase().includes('proposal') ||
                       prompt.toLowerCase().includes('document') ||
-                      prompt.toLowerCase().includes('about'); 
-                      let context = `DOCUMENT CONTENT FROM USER FILES:\n\n`;
+                      prompt.toLowerCase().includes('about');
   
-if (needsSearch) {
-
-  const searchResults = await searchDocuments(knowledgeBase, prompt);
-
-  if (searchResults.length > 0) {
-
-    context += "\n\nSEARCH RESULTS FROM DOCUMENTS:\n\n";
-
-    searchResults.forEach((result) => {
-      context += `FILE: ${result.fileName}\n`;
-      context += `SUMMARY: ${result.summary}\n`;
-
-      if (result.excerpts.length > 0) {
-        result.excerpts.forEach(excerpt => {
-          context += `EXCERPT: ${excerpt}\n`;
-        });
-      }
-
-      context += "\n";
-    });
-
-  }
-
-}
+  let searchResults: DocumentSearchResult[] = [];
   
-// Build context using REAL document content
-let context = `DOCUMENT CONTENT FROM USER FILES:\n\n`;
-
-knowledgeBase.forEach(doc => {
-
-  context += `FILE: ${doc.name}\n`;
-
-  const chunkSize = 2000;
-  const maxChunks = 3;
-
-  for (let i = 0; i < maxChunks; i++) {
-
-    const start = i * chunkSize;
-    const end = start + chunkSize;
-
-    if (start >= doc.content.length) break;
-
-    context += doc.content.substring(start, end);
-    context += "\n\n";
+  if (needsSearch) {
+    searchResults = await searchDocuments(knowledgeBase, prompt);
   }
+  
+  // Build context using REAL document content
+  const context = buildContextFromDocuments(knowledgeBase, searchResults);
 
-  context += "\n-----------------------\n\n";
-});
+  const groq = new Groq({
+    apiKey,
+    dangerouslyAllowBrowser: true
+  });
 
-const groq = new Groq({
-  apiKey,
-  dangerouslyAllowBrowser: true
-});
-
-const completion = await groq.chat.completions.create({
-  model: PRIMARY_MODEL,
-  messages: [
-    {
-      role: "system",
-      content: `You are an AI assistant that analyzes uploaded documents and datasets.
+  const completion = await groq.chat.completions.create({
+    model: PRIMARY_MODEL,
+    messages: [
+      {
+        role: "system",
+        content: `You are an AI assistant that analyzes uploaded documents and datasets.
 
 Your job is to carefully read and understand the provided document content before answering.
 
@@ -836,17 +724,17 @@ Rules you must follow:
 
 Never invent information that is not present in the documents.
 Always base your answer only on the provided document content.`
-    },
-    {
-      role: "user",
-      content: `Question:\n${prompt}\n\nData:\n${context}`
-    }
-  ],
-  temperature: 0.2,
-  max_tokens: 1000
-});
+      },
+      {
+        role: "user",
+        content: `Question:\n${prompt}\n\nData:\n${context}`
+      }
+    ],
+    temperature: 0.2,
+    max_tokens: 1000
+  });
 
-return {
-  text: completion.choices?.[0]?.message?.content || "No answer generated."
-};
+  return {
+    text: completion.choices?.[0]?.message?.content || "No answer generated."
+  };
 }
