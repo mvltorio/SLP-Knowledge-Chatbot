@@ -155,7 +155,11 @@ interface DocumentSearchResult {
   excerpts: string[];
   containsFish: boolean;
   containsProposal: boolean;
+  containsMc: boolean;
+  containsSustainability: boolean;
+  containsSlp: boolean;
   summary: string;
+  matchedTerms?: string[];
 }
 
 // ==================== FILE ANALYSIS FUNCTIONS ====================
@@ -475,76 +479,111 @@ async function searchDocuments(knowledgeBase: KnowledgeDocument[], query: string
   const results: DocumentSearchResult[] = [];
   const queryLower = query.toLowerCase();
   
-  // Determine what we're looking for
+  // Enhanced search terms
   const searchTerms = {
     fish: ['fish', 'fishing', 'aquaculture', 'tilapia', 'bangus', 'milkfish', 'aquatic'],
     proposal: ['proposal', 'project', 'program', 'intervention', 'livelihood', 'enterprise'],
-    slp: ['slp', 'sustainable livelihood', 'livelihood program', 'slpa']
+    slp: ['slp', 'sustainable livelihood', 'livelihood program', 'slpa', 'sustainable livelihood program'],
+    mc: ['mc', 'mc-03', 'mc 03', 'memorandum circular', 'guidelines', 'omnibus', 'guideline', 'mc no', 'circular'],
+    sustainability: [
+      'sustainability', 'sustainable', '5 year', 'five year', '5-year', 'five-year',
+      'plan', 'strategy', 'roadmap', 'long term', 'long-term', 'development plan',
+      'continuity', 'phase', 'implementation', 'milestone', 'target'
+    ],
+    years: ['2023', '2024', '2025', '2026', '2027', '2028', 'year 1', 'year 2', 'year 3', 'year 4', 'year 5'],
+    slpProgram: [
+      'micro-enterprise', 'micro enterprise', 'microenterprise',
+      'employment facilitation', 'employment', 'job',
+      'skills training', 'capacity building', 'training',
+      'community enterprise', 'community organizing',
+      'partnership', 'linkaging', 'network'
+    ]
   };
   
-  // Check if query is about fish
-  const isFishQuery = queryLower.includes('fish') || 
-                      queryLower.includes('fishing') || 
-                      queryLower.includes('aquaculture');
-  
-  // Check if query is about proposals
-  const isProposalQuery = queryLower.includes('proposal') || 
-                          queryLower.includes('project') || 
-                          queryLower.includes('program');
-  
   knowledgeBase.forEach((doc: KnowledgeDocument) => {
-    // Skip CSV files for content search (they're for data, not proposals)
+    // Skip CSV files for content search
     if (doc.name.endsWith('.csv')) return;
     
     const contentLower = doc.content.toLowerCase();
     const excerpts: string[] = [];
+    const matchedTerms: string[] = [];
     
     // Check relevance
     let relevance = 0;
     let containsFish = false;
     let containsProposal = false;
+    let containsMc = false;
+    let containsSustainability = false;
+    let containsSlp = false;
     
-    // Search for fish-related terms
-    searchTerms.fish.forEach(term => {
-      if (contentLower.includes(term)) {
-        relevance += 10;
-        containsFish = true;
-        
-        // Extract context around the term
-        const index = contentLower.indexOf(term);
-        const start = Math.max(0, index - 50);
-        const end = Math.min(contentLower.length, index + 50);
-        excerpts.push(`...${doc.content.substring(start, end)}...`);
-      }
+    // Search for all term categories
+    Object.entries(searchTerms).forEach(([category, terms]) => {
+      terms.forEach((term: string) => {
+        if (contentLower.includes(term)) {
+          // Different weights for different categories
+          if (category === 'mc') {
+            relevance += 20;
+            containsMc = true;
+          } else if (category === 'sustainability') {
+            relevance += 15;
+            containsSustainability = true;
+          } else if (category === 'slp' || category === 'slpProgram') {
+            relevance += 15;
+            containsSlp = true;
+          } else if (category === 'proposal') {
+            relevance += 10;
+            containsProposal = true;
+          } else if (category === 'fish') {
+            relevance += 10;
+            containsFish = true;
+          } else {
+            relevance += 5;
+          }
+          
+          matchedTerms.push(term);
+          
+          // Extract context around the term (only for the first few matches)
+          if (excerpts.length < 5) {
+            const index = contentLower.indexOf(term);
+            const start = Math.max(0, index - 60);
+            const end = Math.min(contentLower.length, index + 60);
+            excerpts.push(`...${doc.content.substring(start, end)}...`);
+          }
+        }
+      });
     });
     
-    // Search for proposal-related terms
-    searchTerms.proposal.forEach(term => {
-      if (contentLower.includes(term)) {
-        relevance += 10;
-        containsProposal = true;
-      }
-    });
-    
-    // Search for SLP terms
-    searchTerms.slp.forEach(term => {
-      if (contentLower.includes(term)) {
-        relevance += 5;
-      }
-    });
+    // Boost relevance if document name matches
+    const fileNameLower = doc.name.toLowerCase();
+    if (fileNameLower.includes('mc-03') || fileNameLower.includes('mc 03') || fileNameLower.includes('guideline')) {
+      relevance += 30;
+      containsMc = true;
+    }
+    if (fileNameLower.includes('sustainability') || fileNameLower.includes('plan')) {
+      relevance += 20;
+      containsSustainability = true;
+    }
+    if (fileNameLower.includes('slp') || fileNameLower.includes('livelihood')) {
+      relevance += 15;
+      containsSlp = true;
+    }
     
     // If relevant, add to results
     if (relevance > 0) {
-      // Generate a summary (first 200 chars)
-      const summary = doc.content.substring(0, 200).replace(/\n/g, ' ') + '...';
+      // Generate a summary (first 300 chars)
+      const summary = doc.content.substring(0, 300).replace(/\n/g, ' ') + '...';
       
       results.push({
         fileName: doc.name,
         relevance,
-        excerpts: excerpts.slice(0, 3), // Limit to 3 excerpts
+        excerpts: excerpts.slice(0, 5),
         containsFish,
         containsProposal,
-        summary
+        containsMc,
+        containsSustainability,
+        containsSlp,
+        summary,
+        matchedTerms: matchedTerms.slice(0, 10)
       });
     }
   });
@@ -635,75 +674,56 @@ async function answerQuery(prompt: string, kb: KnowledgeBase): Promise<{ text: s
 async function answerQueryWithSearch(prompt: string, kb: KnowledgeBase, knowledgeBase: KnowledgeDocument[]): Promise<{ text: string; chart?: ChartSpec }> {
   const promptLower = prompt.toLowerCase();
   
-  // Check if this is a fish proposal query
-  if (promptLower.includes('fish') || promptLower.includes('proposal') || promptLower.includes('project')) {
+  // Search all documents
+  const searchResults = await searchDocuments(knowledgeBase, prompt);
+  
+  if (searchResults.length > 0) {
+    let response = `## 📄 Document Search Results\n\n`;
+    response += `I searched through all ${knowledgeBase.length} files and found ${searchResults.length} relevant documents:\n\n`;
     
-    // Search all documents
-    const searchResults = await searchDocuments(knowledgeBase, prompt);
-    
-    if (searchResults.length > 0) {
-      let response = `## 🐟 Fish-Related Proposals Found\n\n`;
-      response += `I searched through all ${knowledgeBase.length} files and found ${searchResults.length} relevant documents:\n\n`;
+    searchResults.forEach((result, index) => {
+      response += `### ${index + 1}. ${result.fileName}\n`;
+      response += `**Relevance Score:** ${result.relevance}\n`;
       
-      searchResults.forEach((result, index) => {
-        response += `### ${index + 1}. ${result.fileName}\n`;
-        response += `**Relevance Score:** ${result.relevance}\n`;
-        
-        if (result.containsFish && result.containsProposal) {
-          response += `✅ **Contains both fish AND proposal content**\n`;
-        } else if (result.containsFish) {
-          response += `🐟 **Contains fish-related content**\n`;
-        } else if (result.containsProposal) {
-          response += `📝 **Contains proposal-related content**\n`;
-        }
-        
-        response += `\n**Summary:**\n${result.summary}\n\n`;
-        
-        if (result.excerpts.length > 0) {
-          response += `**Relevant Excerpts:**\n`;
-          result.excerpts.forEach(excerpt => {
-            response += `> "${excerpt}"\n\n`;
-          });
-        }
-        
-        response += `---\n\n`;
-      });
+      const tags = [];
+      if (result.containsMc) tags.push('📋 MC Guidelines');
+      if (result.containsSustainability) tags.push('🌱 Sustainability');
+      if (result.containsSlp) tags.push('🤝 SLP');
+      if (result.containsFish) tags.push('🐟 Fish');
+      if (result.containsProposal) tags.push('📝 Proposal');
       
-      // If no fish proposals but other fish content
-      const fishProposals = searchResults.filter(r => r.containsFish && r.containsProposal);
-      if (fishProposals.length === 0) {
-        response += `\n### 💡 Note\n`;
-        response += `I found fish-related content but no specific proposals. Would you like me to:\n`;
-        response += `- Show all fish-related documents\n`;
-        response += `- Search for other livelihood proposals\n`;
-        response += `- Focus on a specific type of fish program\n`;
+      if (tags.length > 0) {
+        response += `**Tags:** ${tags.join(' · ')}\n`;
       }
       
-      return { text: response };
-    } else {
-      // No results found
-      let response = `## 🔍 Fish Proposal Search\n\n`;
-      response += `I searched through all ${knowledgeBase.length} files but couldn't find any proposals related to fish.\n\n`;
+      response += `\n**Summary:**\n${result.summary}\n\n`;
       
-      // List all files that were searched
-      response += `### 📁 Files Searched:\n`;
-      knowledgeBase.forEach(doc => {
-        if (!doc.name.endsWith('.csv')) {
-          response += `- ${doc.name}\n`;
-        }
-      });
+      if (result.excerpts.length > 0) {
+        response += `**Relevant Excerpts:**\n`;
+        result.excerpts.forEach(excerpt => {
+          response += `> "${excerpt}"\n\n`;
+        });
+      }
       
-      response += `\n### 💡 Suggestions:\n`;
-      response += `- Try uploading fish-related proposal documents\n`;
-      response += `- Search for other livelihood programs (e.g., "poultry", "vegetable", "small business")\n`;
-      response += `- Check if the proposals are in a different format\n`;
-      
-      return { text: response };
-    }
+      response += `---\n\n`;
+    });
+    
+    return { text: response };
+  } else {
+    // No results found
+    let response = `## 🔍 Search Results\n\n`;
+    response += `I searched through all ${knowledgeBase.length} files but couldn't find content related to your query.\n\n`;
+    
+    // List all files that were searched
+    response += `### 📁 Files Searched:\n`;
+    knowledgeBase.forEach(doc => {
+      if (!doc.name.endsWith('.csv')) {
+        response += `- ${doc.name}\n`;
+      }
+    });
+    
+    return { text: response };
   }
-  
-  // For other queries, use the existing answerQuery function
-  return answerQuery(prompt, kb);
 }
 
 // ==================== EXPORTED FUNCTIONS ====================
@@ -783,23 +803,71 @@ export async function generateContent(
   // Analyze all files for structure (CSV analysis)
   const kb = await analyzeAllFiles(knowledgeBase);
   
-  // Check if this is a search query that needs content analysis
+  // IMPROVED: Better detection for when to search Word documents
   const promptLower = prompt.toLowerCase();
-  const needsContentSearch = 
+  
+  // Check for MC/guidelines related queries
+  const isMcGuidelinesQuery = 
+    promptLower.includes('mc') || 
+    promptLower.includes('guidelines') ||
+    promptLower.includes('guideline') ||
+    promptLower.includes('omnibus') ||
+    promptLower.includes('circular') ||
+    promptLower.match(/mc[-\s]?0?3/i) !== null;
+  
+  // Check for sustainability/plan related queries
+  const isSustainabilityQuery = 
+    promptLower.includes('sustainability') ||
+    promptLower.includes('sustainable') ||
+    promptLower.includes('plan') ||
+    promptLower.includes('5 year') ||
+    promptLower.includes('five year') ||
+    promptLower.includes('strategy') ||
+    promptLower.includes('roadmap');
+  
+  // Check for SLP specific queries
+  const isSlpQuery = 
+    promptLower.includes('slp') ||
+    promptLower.includes('livelihood program') ||
+    promptLower.includes('sustainable livelihood');
+  
+  // Check for document/proposal queries
+  const isDocumentQuery = 
     promptLower.includes('proposal') || 
     promptLower.includes('project') || 
     promptLower.includes('program') ||
     promptLower.includes('fish') ||
-    promptLower.includes('livelihood') ||
     promptLower.includes('document') ||
-    promptLower.includes('file');
+    promptLower.includes('file') ||
+    promptLower.includes('content') ||
+    promptLower.includes('what is') ||
+    promptLower.includes('explain') ||
+    promptLower.includes('tell me about');
+  
+  // Combine all conditions
+  const needsContentSearch = 
+    isMcGuidelinesQuery || 
+    isSustainabilityQuery || 
+    isSlpQuery || 
+    isDocumentQuery ||
+    // Always search if the query is asking for information from documents
+    promptLower.includes('mc 03') ||
+    promptLower.includes('mc-03');
+  
+  console.log('Query type detected:', {
+    isMcGuidelinesQuery,
+    isSustainabilityQuery,
+    isSlpQuery,
+    isDocumentQuery,
+    needsContentSearch
+  });
   
   let result;
   if (needsContentSearch) {
     // Use search that looks inside document content
     result = await answerQueryWithSearch(prompt, kb, knowledgeBase);
   } else {
-    // Use structural analysis (for data questions)
+    // Use structural analysis (for data questions like counts, statistics)
     result = await answerQuery(prompt, kb);
   }
   
