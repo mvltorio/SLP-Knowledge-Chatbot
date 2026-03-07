@@ -1,5 +1,6 @@
 import Groq from "groq-sdk";
 import { ChartSpec } from "../types";
+import { findRelevantDocs } from "../../lib/vectorSearch";
 
 // ==================== MODEL CONFIGURATION ====================
 const PRIMARY_MODEL = "llama-3.3-70b-versatile";
@@ -787,8 +788,42 @@ export async function generateContent(
     }
   }
   
-  // Generate dynamic answer based on what's in the files
-  const answer = generateDynamicAnswer(prompt, kb);
-  
-  return { text: answer };
+// ---------------- VECTOR SEARCH ----------------
+
+// Find the most relevant documents for the question
+const relevantDocs = findRelevantDocs(prompt, knowledgeBase, 5);
+
+let context = `RELEVANT DOCUMENT DATA:\n\n`;
+
+relevantDocs.forEach((doc: any) => {
+  context += `File: ${doc.name}\n`;
+  context += `${doc.content.substring(0, 2000)}\n\n`;
+});
+
+const groq = new Groq({
+  apiKey,
+  dangerouslyAllowBrowser: true
+});
+
+const completion = await groq.chat.completions.create({
+  model: PRIMARY_MODEL,
+  messages: [
+    {
+      role: "system",
+      content: `You are a data analysis assistant. 
+Answer ONLY using the provided file data. 
+If the answer cannot be found in the files, say you cannot find it.`
+    },
+    {
+      role: "user",
+      content: `Question:\n${prompt}\n\nData:\n${context}`
+    }
+  ],
+  temperature: 0.2,
+  max_tokens: 1000
+});
+
+return {
+  text: completion.choices?.[0]?.message?.content || "No answer generated."
+};
 }
