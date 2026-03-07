@@ -473,7 +473,40 @@ The documents are shown above with their folder/category names.`
   return completion.choices?.[0]?.message?.content || "No answer generated.";
 }
 
-// ==================== MAIN EXPORTED FUNCTION ====================
+// ==================== ANALYZE IMAGE FUNCTION ====================
+
+export async function analyzeImage(file: File, customKey?: string): Promise<string> {
+  try {
+    const apiKey = getApiKey(customKey);
+    const fileContent = await readFileContent(file).catch(() => null);
+    
+    if (fileContent) {
+      const groq = new Groq({
+        apiKey,
+        dangerouslyAllowBrowser: true
+      });
+
+      const completion = await groq.chat.completions.create({
+        model: FALLBACK_MODEL,
+        messages: [
+          {
+            role: "user",
+            content: `This file "${file.name}" contains:\n\n${fileContent.substring(0, 2000)}\n\nPlease summarize what this document contains.`
+          }
+        ],
+        temperature: 0.1,
+        max_tokens: 500
+      });
+
+      return completion.choices?.[0]?.message?.content || "Could not analyze the file content.";
+    }
+
+    return `[File: ${file.name}] Size: ${(file.size / 1024).toFixed(2)} KB Type: ${file.type || 'Unknown'}`;
+  } catch (error) {
+    console.error("File analysis error:", error);
+    return `Could not analyze the file "${file.name}".`;
+  }
+}
 
 // ==================== MAIN EXPORTED FUNCTION ====================
 
