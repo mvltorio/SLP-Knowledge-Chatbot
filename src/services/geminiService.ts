@@ -61,14 +61,15 @@ interface FileAnalysis {
   columns: ColumnInfo[];
   summary: string;
   keyFindings: string[];
-  topics: Set<string>; // Auto-detected topics from content
-  entities: Map<string, Set<string>>; // Named entities found
-  fullContent: string; // Store full content for answering questions
+  topics: Set<string>;
+  entities: Map<string, Set<string>>;
+  fullContent: string;
+  sections?: Map<string, string>; // For extracting sections from documents
 }
 
 interface KnowledgeBase {
   files: FileAnalysis[];
-  allColumns: Map<string, ColumnInfo[]>; // Column name -> files where it appears
+  allColumns: Map<string, ColumnInfo[]>;
   relationships: Array<{
     column1: string;
     column2: string;
@@ -83,15 +84,13 @@ interface KnowledgeBase {
     columnFrequency: Map<string, number>;
     fileTypes: Map<string, number>;
   };
-  // Auto-detected data categories (not hardcoded)
   dataCategories: Map<string, {
     columns: string[];
     files: string[];
     values: Map<string, number>;
     description: string;
   }>;
-  // Search index for quick lookup
-  searchIndex: Map<string, Set<string>>; // term -> files containing it
+  searchIndex: Map<string, Set<string>>;
 }
 
 interface DocumentSearchResult {
@@ -102,6 +101,7 @@ interface DocumentSearchResult {
   summary: string;
   fileType: string;
   score: number;
+  relevantSections?: Map<string, string>; // Store relevant sections
 }
 
 // ==================== UTILITY FUNCTIONS ====================
@@ -152,8 +152,59 @@ function calculateSimilarity(str1: string, str2: string): number {
 
 function extractKeywords(text: string): Set<string> {
   const words = text.toLowerCase().split(/\W+/);
-  const stopWords = new Set(['the', 'and', 'for', 'with', 'this', 'that', 'from', 'have', 'will', 'are', 'was', 'were']);
-  return new Set(words.filter(w => w.length > 3 && !stopWords.has(w)));
+  const stopWords = new Set(['the', 'and', 'for', 'with', 'this', 'that', 'from', 'have', 'will', 'are', 'was', 'were', 'what', 'when', 'where', 'which', 'who', 'how']);
+  return new Set(words.filter(w => w.length > 2 && !stopWords.has(w)));
+}
+
+// Extract sections from a document based on headings
+function extractSections(content: string): Map<string, string> {
+  const sections = new Map<string, string>();
+  
+  // Common heading patterns
+  const headingPatterns = [
+    /^#{1,3}\s+(.+)$/gm, // Markdown headings
+    /^([A-Z][A-Z\s]+):$/gm, // ALL CAPS headings with colon
+    /^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*):$/gm, // Title Case headings with colon
+    /^\d+\.\s+(.+)$/gm, // Numbered sections
+    /^[IVX]+\.\s+(.+)$/gm // Roman numeral sections
+  ];
+  
+  let currentSection = "GENERAL";
+  let currentContent: string[] = [];
+  const lines = content.split('\n');
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    let isHeading = false;
+    
+    // Check if this line is a heading
+    for (const pattern of headingPatterns) {
+      const match = line.match(pattern);
+      if (match) {
+        // Save previous section
+        if (currentContent.length > 0) {
+          sections.set(currentSection, currentContent.join('\n'));
+        }
+        
+        // Start new section
+        currentSection = match[1] || match[0];
+        currentContent = [];
+        isHeading = true;
+        break;
+      }
+    }
+    
+    if (!isHeading && line.length > 0) {
+      currentContent.push(line);
+    }
+  }
+  
+  // Save last section
+  if (currentContent.length > 0) {
+    sections.set(currentSection, currentContent.join('\n'));
+  }
+  
+  return sections;
 }
 
 // ==================== DYNAMIC FILE ANALYSIS ====================
@@ -173,18 +224,15 @@ function parseCSV(content: string): { headers: string[]; rows: string[][] } {
 function determineDataType(values: string[]): 'string' | 'number' | 'boolean' | 'date' | 'unknown' {
   if (values.length === 0) return 'unknown';
   
-  // Check if all are numbers
   if (values.every(v => !isNaN(Number(v)) && v.trim() !== '')) {
     return 'number';
   }
   
-  // Check if all are boolean-like
   const booleanValues = ['yes', 'no', 'true', 'false', 'y', 'n', '1', '0'];
   if (values.every(v => booleanValues.includes(v.toLowerCase().trim()))) {
     return 'boolean';
   }
   
-  // Check if all are dates
   const datePattern = /^\d{1,4}[\/-]\d{1,2}[\/-]\d{1,4}$/;
   if (values.every(v => datePattern.test(v))) {
     return 'date';
@@ -211,7 +259,6 @@ function analyzeColumn(header: string, values: string[], totalRows: number, file
   const dataType = determineDataType(Array.from(possibleValues));
   const uniqueValueCount = possibleValues.size;
   
-  // Auto-generate description based on data patterns
   let description = `Column "${header}"`;
   if (uniqueValueCount === 1) {
     description += ` (constant value: ${sampleValues[0]})`;
@@ -248,9 +295,11 @@ function analyzeWordDocument(doc: KnowledgeDocument): FileAnalysis {
   const lines = doc.content.split('\n');
   const content = doc.content;
   
+  // Extract sections
+  const sections = extractSections(content);
+  
   // Auto-detect topics from content
   const topics = new Set<string>();
-  const keywords = extractKeywords(content);
   
   // Look for patterns that might indicate topics
   const topicPatterns = [
@@ -263,7 +312,9 @@ function analyzeWordDocument(doc: KnowledgeDocument): FileAnalysis {
     /\b(health|medical|hospital|clinic)\b/gi,
     /\b(education|school|student|teacher)\b/gi,
     /\b(infrastructure|building|construction)\b/gi,
-    /\b(funding|grant|budget|financial)\b/gi
+    /\b(funding|grant|budget|financial)\b/gi,
+    /\b(phase|phase 1|phase 2|phase 3|phase 4|phase 5)\b/gi,
+    /\b(guidelines|guideline|mc|memorandum circular)\b/gi
   ];
   
   topicPatterns.forEach(pattern => {
@@ -283,6 +334,11 @@ function analyzeWordDocument(doc: KnowledgeDocument): FileAnalysis {
   const barangays = content.match(barangayPattern) || [];
   entities.set('locations', new Set(barangays));
   
+  // Extract document references
+  const docRefPattern = /\b(MC-No[.-]?\d+[-]?\d+|MC\s+\d+|Memorandum Circular|Administrative Order)\b/gi;
+  const docRefs = content.match(docRefPattern) || [];
+  entities.set('document_references', new Set(docRefs));
+  
   const analysis: FileAnalysis = {
     fileName: doc.name,
     fileType: 'word',
@@ -291,11 +347,13 @@ function analyzeWordDocument(doc: KnowledgeDocument): FileAnalysis {
     summary: content.substring(0, 300).replace(/\n/g, ' ') + '...',
     keyFindings: [
       `Contains approximately ${names.length} names`,
-      `Topics detected: ${Array.from(topics).slice(0, 5).join(', ')}`
+      `Topics detected: ${Array.from(topics).slice(0, 5).join(', ')}`,
+      `Document references: ${Array.from(entities.get('document_references') || []).slice(0, 3).join(', ')}`
     ],
     topics,
     entities,
-    fullContent: content // Store full content for answering questions
+    fullContent: content,
+    sections
   };
   
   return analysis;
@@ -320,7 +378,6 @@ async function analyzeAllFiles(knowledgeBase: KnowledgeDocument[]): Promise<Know
   };
   
   knowledgeBase.forEach((doc: KnowledgeDocument) => {
-    // Track file types
     const fileType = doc.name.endsWith('.csv') ? 'csv' : 
                      doc.name.includes('.doc') ? 'word' : 'unknown';
     kb.statistics.fileTypes.set(fileType, (kb.statistics.fileTypes.get(fileType) || 0) + 1);
@@ -337,18 +394,16 @@ async function analyzeAllFiles(knowledgeBase: KnowledgeDocument[]): Promise<Know
         keyFindings: [],
         topics: new Set(),
         entities: new Map(),
-        fullContent: doc.content // Store full content
+        fullContent: doc.content
       };
       
       kb.statistics.totalRows += rows.length;
       
-      // Analyze each column
       headers.forEach((header: string, index: number) => {
         const values = rows.map(row => row[index] || '');
         const columnInfo = analyzeColumn(header, values, rows.length, doc.name);
         fileAnalysis.columns.push(columnInfo);
         
-        // Update global tracking
         kb.statistics.uniqueColumns.add(header);
         kb.statistics.columnFrequency.set(header, (kb.statistics.columnFrequency.get(header) || 0) + 1);
         
@@ -357,10 +412,8 @@ async function analyzeAllFiles(knowledgeBase: KnowledgeDocument[]): Promise<Know
         }
         kb.allColumns.get(header)!.push(columnInfo);
         
-        // Auto-detect data categories based on column names and values
         const headerLower = header.toLowerCase();
         
-        // Look for potential categorical data
         if (columnInfo.isCategorical && columnInfo.uniqueValueCount < 20) {
           const categoryName = headerLower.replace(/[^a-z]/g, '');
           const categoryData = kb.dataCategories.get(categoryName) || {
@@ -373,7 +426,6 @@ async function analyzeAllFiles(knowledgeBase: KnowledgeDocument[]): Promise<Know
           categoryData.columns.push(header);
           categoryData.files.push(doc.name);
           
-          // Aggregate value counts
           columnInfo.valueCounts.forEach((count, value) => {
             categoryData.values.set(value, (categoryData.values.get(value) || 0) + count);
           });
@@ -400,7 +452,6 @@ async function analyzeAllFiles(knowledgeBase: KnowledgeDocument[]): Promise<Know
     }
   });
   
-  // Find relationships between columns
   const allColumnNames = Array.from(kb.statistics.uniqueColumns);
   for (let i = 0; i < allColumnNames.length; i++) {
     for (let j = i + 1; j < allColumnNames.length; j++) {
@@ -425,7 +476,7 @@ async function analyzeAllFiles(knowledgeBase: KnowledgeDocument[]): Promise<Know
   return kb;
 }
 
-// ==================== DYNAMIC SEARCH ====================
+// ==================== IMPROVED SEARCH ====================
 
 async function searchDocuments(knowledgeBase: KnowledgeDocument[], query: string): Promise<DocumentSearchResult[]> {
   const results: DocumentSearchResult[] = [];
@@ -433,11 +484,12 @@ async function searchDocuments(knowledgeBase: KnowledgeDocument[], query: string
   const queryKeywords = extractKeywords(query);
   
   knowledgeBase.forEach((doc: KnowledgeDocument) => {
-    if (doc.name.endsWith('.csv')) return; // Skip CSV for content search
+    if (doc.name.endsWith('.csv')) return;
     
     const contentLower = doc.content.toLowerCase();
     const excerpts: string[] = [];
     const matchedTerms: string[] = [];
+    const relevantSections = new Map<string, string>();
     
     let relevance = 0;
     
@@ -448,14 +500,43 @@ async function searchDocuments(knowledgeBase: KnowledgeDocument[], query: string
         matchedTerms.push(keyword);
         
         // Extract context
-        if (excerpts.length < 3) {
+        if (excerpts.length < 5) {
           const index = contentLower.indexOf(keyword);
-          const start = Math.max(0, index - 50);
-          const end = Math.min(contentLower.length, index + 50);
+          const start = Math.max(0, index - 100);
+          const end = Math.min(contentLower.length, index + 200);
           excerpts.push(`...${doc.content.substring(start, end)}...`);
         }
       }
     });
+    
+    // Look for specific patterns in the query
+    if (queryLower.includes('phase') || queryLower.includes('phases')) {
+      // Find sections that might contain phase information
+      const phasePattern = /(phase\s*[1-5]|step\s*[1-5]|stage\s*[1-5])/gi;
+      const phaseMatches = doc.content.match(phasePattern);
+      if (phaseMatches) {
+        relevance += 30;
+        phaseMatches.forEach(phase => matchedTerms.push(phase));
+        
+        // Extract paragraphs containing phase information
+        const paragraphs = doc.content.split('\n\n');
+        paragraphs.forEach(para => {
+          if (para.toLowerCase().includes('phase')) {
+            relevantSections.set('Phases', para.substring(0, 300));
+          }
+        });
+      }
+    }
+    
+    // Check for document references
+    if (queryLower.includes('mc') || queryLower.includes('circular') || queryLower.includes('guideline')) {
+      const docRefPattern = /(MC-No[.-]?\d+[-]?\d+|MC\s+\d+|Memorandum Circular|guideline)/gi;
+      const docMatches = doc.content.match(docRefPattern);
+      if (docMatches) {
+        relevance += 40;
+        docMatches.forEach(ref => matchedTerms.push(ref));
+      }
+    }
     
     // Boost if filename matches
     const fileNameLower = doc.name.toLowerCase();
@@ -466,7 +547,7 @@ async function searchDocuments(knowledgeBase: KnowledgeDocument[], query: string
     });
     
     if (relevance > 0) {
-      const summary = doc.content.substring(0, 250).replace(/\n/g, ' ') + '...';
+      const summary = doc.content.substring(0, 300).replace(/\n/g, ' ') + '...';
       
       results.push({
         fileName: doc.name,
@@ -475,7 +556,8 @@ async function searchDocuments(knowledgeBase: KnowledgeDocument[], query: string
         matchedTerms,
         summary,
         fileType: doc.name.includes('.doc') ? 'Word Document' : 'File',
-        score: relevance
+        score: relevance,
+        relevantSections
       });
     }
   });
@@ -486,7 +568,6 @@ async function searchDocuments(knowledgeBase: KnowledgeDocument[], query: string
 // ==================== COPY REQUEST HANDLER ====================
 
 async function handleCopyRequest(prompt: string, knowledgeBase: KnowledgeDocument[]): Promise<{ text: string; fileDownload?: any }> {
-  // Extract filename from request
   let requestedFile = '';
   
   const patterns = [
@@ -515,7 +596,6 @@ async function handleCopyRequest(prompt: string, knowledgeBase: KnowledgeDocumen
     };
   }
   
-  // Find the document (flexible matching)
   const normalizeFileName = (filename: string): string => {
     return filename.toLowerCase().replace(/\s+/g, ' ').trim();
   };
@@ -566,36 +646,86 @@ async function handleCopyRequest(prompt: string, knowledgeBase: KnowledgeDocumen
   };
 }
 
-// ==================== BUILD CONTEXT FROM DOCUMENTS ====================
+// ==================== IMPROVED CONTEXT BUILDING ====================
 
-function buildContextFromDocuments(knowledgeBase: KnowledgeDocument[], searchResults: DocumentSearchResult[]): string {
-  let context = `DOCUMENT CONTENT FROM USER FILES:\n\n`;
+function buildContextFromDocuments(knowledgeBase: KnowledgeDocument[], searchResults: DocumentSearchResult[], query: string): string {
+  let context = `=== DOCUMENTS UPLOADED BY USER ===\n\n`;
   
-  // Add all document contents to context
-  knowledgeBase.forEach(doc => {
-    if (doc.name.endsWith('.csv')) {
-      // For CSV files, add a summary
-      context += `FILE: ${doc.name} (CSV)\n`;
-      context += `CONTENT: This is a CSV file with the following data:\n${doc.content.substring(0, 1000)}${doc.content.length > 1000 ? '...' : ''}\n\n`;
-    } else {
-      // For Word documents, add full content (truncated if too long)
-      context += `FILE: ${doc.name}\n`;
-      context += `CONTENT: ${doc.content.substring(0, 3000)}${doc.content.length > 3000 ? '...' : ''}\n\n`;
+  // First, try to find the most relevant document for the query
+  const relevantDocs = searchResults.length > 0 
+    ? searchResults 
+    : knowledgeBase.map(doc => ({
+        fileName: doc.name,
+        relevance: 0,
+        excerpts: [],
+        matchedTerms: [],
+        summary: doc.content.substring(0, 200),
+        fileType: doc.name.includes('.doc') ? 'Word' : 'File',
+        score: 0
+      }));
+  
+  // Sort by relevance
+  relevantDocs.sort((a, b) => b.relevance - a.relevance);
+  
+  // Add full content of the most relevant documents
+  const docsToInclude = relevantDocs.slice(0, 3); // Include top 3 most relevant
+  
+  docsToInclude.forEach((result, index) => {
+    const doc = knowledgeBase.find(d => d.name === result.fileName);
+    if (!doc) return;
+    
+    context += `\n--- DOCUMENT ${index + 1}: ${doc.name} ---\n`;
+    context += `RELEVANCE: ${result.relevance}\n`;
+    
+    if (result.matchedTerms && result.matchedTerms.length > 0) {
+      context += `MATCHED TERMS: ${result.matchedTerms.join(', ')}\n`;
     }
+    
+    context += `\nFULL CONTENT:\n`;
+    
+    // For the specific query about SLP phases, extract relevant sections
+    if (query.toLowerCase().includes('slp') || query.toLowerCase().includes('phase')) {
+      // Look for sections that might contain phase information
+      const lines = doc.content.split('\n');
+      let inRelevantSection = false;
+      let relevantContent = [];
+      
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        
+        // Check for section headings
+        if (line.match(/phase|step|stage|guideline|mc|circular/i)) {
+          inRelevantSection = true;
+          relevantContent.push(line);
+        } else if (inRelevantSection && line.trim().length > 0) {
+          relevantContent.push(line);
+        } else if (inRelevantSection && line.trim().length === 0) {
+          // Empty line might indicate end of section
+          if (relevantContent.length > 10) {
+            break;
+          }
+        }
+      }
+      
+      if (relevantContent.length > 0) {
+        context += relevantContent.join('\n');
+      } else {
+        // If no specific section found, include full document
+        context += doc.content;
+      }
+    } else {
+      // For other queries, include full document
+      context += doc.content;
+    }
+    
+    context += '\n\n';
   });
   
-  // Add search results if available
-  if (searchResults.length > 0) {
-    context += "\n\nRELEVANT SEARCH RESULTS:\n\n";
-    searchResults.forEach((result) => {
-      context += `FILE: ${result.fileName}\n`;
-      context += `SUMMARY: ${result.summary}\n`;
-      if (result.excerpts.length > 0) {
-        result.excerpts.forEach(excerpt => {
-          context += `EXCERPT: ${excerpt}\n`;
-        });
-      }
-      context += "\n";
+  // If we couldn't find relevant documents, include all documents
+  if (docsToInclude.length === 0) {
+    knowledgeBase.forEach((doc, index) => {
+      context += `\n--- DOCUMENT ${index + 1}: ${doc.name} ---\n`;
+      context += `CONTENT:\n${doc.content}\n\n`;
     });
   }
   
@@ -682,21 +812,14 @@ export async function generateContent(
   // Analyze all files
   const kb = await analyzeAllFiles(knowledgeBase);
   
-  // Check if this is a search query
-  const needsSearch = prompt.toLowerCase().includes('find') || 
-                      prompt.toLowerCase().includes('search') ||
-                      prompt.toLowerCase().includes('proposal') ||
-                      prompt.toLowerCase().includes('document') ||
-                      prompt.toLowerCase().includes('about');
+  // Search for relevant documents
+  const searchResults = await searchDocuments(knowledgeBase, prompt);
   
-  let searchResults: DocumentSearchResult[] = [];
-  
-  if (needsSearch) {
-    searchResults = await searchDocuments(knowledgeBase, prompt);
-  }
-  
-  // Build context using REAL document content
-  const context = buildContextFromDocuments(knowledgeBase, searchResults);
+  // Build comprehensive context
+  const context = buildContextFromDocuments(knowledgeBase, searchResults, prompt);
+
+  console.log("Search results:", searchResults.length);
+  console.log("Context length:", context.length);
 
   const groq = new Groq({
     apiKey,
@@ -708,33 +831,37 @@ export async function generateContent(
     messages: [
       {
         role: "system",
-        content: `You are an AI assistant that analyzes uploaded documents and datasets.
+        content: `You are an AI assistant that analyzes uploaded documents and answers questions based SOLELY on their content.
 
-Your job is to carefully read and understand the provided document content before answering.
+IMPORTANT RULES:
+1. ONLY use information from the provided documents - never invent answers
+2. If the exact answer isn't in the documents, say "I cannot find that information in the uploaded files"
+3. When you find relevant information, quote or reference the specific section
+4. For questions about guidelines, phases, or procedures, extract the exact details from the documents
+5. If multiple documents contain information, combine them into a comprehensive answer
+6. Be specific - include numbers, dates, and exact wording from the documents
 
-Rules you must follow:
-
-1. Always analyze the FULL document content provided in the context.
-2. If the answer exists in the documents, explain it clearly and accurately.
-3. When possible, quote or summarize the relevant section from the document.
-4. If the question refers to definitions, phases, guidelines, or procedures, extract the exact information from the files.
-5. If multiple documents contain relevant information, combine them into one clear answer.
-6. If the answer does NOT exist in the uploaded files, say:
-   "I cannot find that information in the uploaded files."
-
-Never invent information that is not present in the documents.
-Always base your answer only on the provided document content.`
+The documents are provided in the context below. Read them carefully before answering.`
       },
       {
         role: "user",
-        content: `Question:\n${prompt}\n\nData:\n${context}`
+        content: `QUESTION: ${prompt}\n\nDOCUMENTS:\n${context}\n\nBased ONLY on the documents above, answer the question. If the answer cannot be found, say so.`
       }
     ],
-    temperature: 0.2,
-    max_tokens: 1000
+    temperature: 0.1, // Lower temperature for more accurate responses
+    max_tokens: 1500
   });
 
+  const answer = completion.choices?.[0]?.message?.content || "No answer generated.";
+  
+  // If the answer indicates no information found, add a helpful message
+  if (answer.includes("cannot find") || answer.includes("not available")) {
+    return {
+      text: answer + "\n\nTry asking about something else in your documents, or upload more relevant files."
+    };
+  }
+
   return {
-    text: completion.choices?.[0]?.message?.content || "No answer generated."
+    text: answer
   };
 }
