@@ -788,6 +788,7 @@ export async function generateContent(
   }
   
 // Build context from analyzed files
+// Build context from analyzed files
 let context = `DATA FROM USER FILES:\n\n`;
 
 kb.files.forEach(file => {
@@ -814,9 +815,22 @@ const completion = await groq.chat.completions.create({
   messages: [
     {
       role: "system",
-      content: `You are a data analysis assistant. 
-Answer ONLY using the provided file data. 
-If the answer cannot be found in the files, say you cannot find it.`
+      content: `You are an AI assistant that analyzes uploaded documents and datasets.
+
+Your job is to carefully read and understand the provided document content before answering.
+
+Rules you must follow:
+
+1. Always analyze the FULL document content provided in the context.
+2. If the answer exists in the documents, explain it clearly and accurately.
+3. When possible, quote or summarize the relevant section from the document.
+4. If the question refers to definitions, phases, guidelines, or procedures, extract the exact information from the files.
+5. If multiple documents contain relevant information, combine them into one clear answer.
+6. If the answer does NOT exist in the uploaded files, say:
+   "I cannot find that information in the uploaded files."
+
+Never invent information that is not present in the documents.
+Always base your answer only on the provided document content.`
     },
     {
       role: "user",
