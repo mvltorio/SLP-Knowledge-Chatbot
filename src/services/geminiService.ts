@@ -149,6 +149,15 @@ interface KnowledgeBase {
   };
 }
 
+interface DocumentSearchResult {
+  fileName: string;
+  relevance: number;
+  excerpts: string[];
+  containsFish: boolean;
+  containsProposal: boolean;
+  summary: string;
+}
+
 // ==================== FILE ANALYSIS FUNCTIONS ====================
 
 /**
@@ -460,6 +469,91 @@ function generateKnowledgeSummary(kb: KnowledgeBase): string {
 }
 
 /**
+ * Search through all documents for specific topics
+ */
+async function searchDocuments(knowledgeBase: KnowledgeDocument[], query: string): Promise<DocumentSearchResult[]> {
+  const results: DocumentSearchResult[] = [];
+  const queryLower = query.toLowerCase();
+  
+  // Determine what we're looking for
+  const searchTerms = {
+    fish: ['fish', 'fishing', 'aquaculture', 'tilapia', 'bangus', 'milkfish', 'aquatic'],
+    proposal: ['proposal', 'project', 'program', 'intervention', 'livelihood', 'enterprise'],
+    slp: ['slp', 'sustainable livelihood', 'livelihood program', 'slpa']
+  };
+  
+  // Check if query is about fish
+  const isFishQuery = queryLower.includes('fish') || 
+                      queryLower.includes('fishing') || 
+                      queryLower.includes('aquaculture');
+  
+  // Check if query is about proposals
+  const isProposalQuery = queryLower.includes('proposal') || 
+                          queryLower.includes('project') || 
+                          queryLower.includes('program');
+  
+  knowledgeBase.forEach((doc: KnowledgeDocument) => {
+    // Skip CSV files for content search (they're for data, not proposals)
+    if (doc.name.endsWith('.csv')) return;
+    
+    const contentLower = doc.content.toLowerCase();
+    const excerpts: string[] = [];
+    
+    // Check relevance
+    let relevance = 0;
+    let containsFish = false;
+    let containsProposal = false;
+    
+    // Search for fish-related terms
+    searchTerms.fish.forEach(term => {
+      if (contentLower.includes(term)) {
+        relevance += 10;
+        containsFish = true;
+        
+        // Extract context around the term
+        const index = contentLower.indexOf(term);
+        const start = Math.max(0, index - 50);
+        const end = Math.min(contentLower.length, index + 50);
+        excerpts.push(`...${doc.content.substring(start, end)}...`);
+      }
+    });
+    
+    // Search for proposal-related terms
+    searchTerms.proposal.forEach(term => {
+      if (contentLower.includes(term)) {
+        relevance += 10;
+        containsProposal = true;
+      }
+    });
+    
+    // Search for SLP terms
+    searchTerms.slp.forEach(term => {
+      if (contentLower.includes(term)) {
+        relevance += 5;
+      }
+    });
+    
+    // If relevant, add to results
+    if (relevance > 0) {
+      // Generate a summary (first 200 chars)
+      const summary = doc.content.substring(0, 200).replace(/\n/g, ' ') + '...';
+      
+      results.push({
+        fileName: doc.name,
+        relevance,
+        excerpts: excerpts.slice(0, 3), // Limit to 3 excerpts
+        containsFish,
+        containsProposal,
+        summary
+      });
+    }
+  });
+  
+  // Sort by relevance (highest first)
+  return results.sort((a, b) => b.relevance - a.relevance);
+}
+
+/**
  * Answer query based on knowledge base
  */
 async function answerQuery(prompt: string, kb: KnowledgeBase): Promise<{ text: string; chart?: ChartSpec }> {
@@ -533,6 +627,83 @@ async function answerQuery(prompt: string, kb: KnowledgeBase): Promise<{ text: s
   }
   
   return { text: generateKnowledgeSummary(kb) };
+}
+
+/**
+ * Answer queries that might require searching document content
+ */
+async function answerQueryWithSearch(prompt: string, kb: KnowledgeBase, knowledgeBase: KnowledgeDocument[]): Promise<{ text: string; chart?: ChartSpec }> {
+  const promptLower = prompt.toLowerCase();
+  
+  // Check if this is a fish proposal query
+  if (promptLower.includes('fish') || promptLower.includes('proposal') || promptLower.includes('project')) {
+    
+    // Search all documents
+    const searchResults = await searchDocuments(knowledgeBase, prompt);
+    
+    if (searchResults.length > 0) {
+      let response = `## 🐟 Fish-Related Proposals Found\n\n`;
+      response += `I searched through all ${knowledgeBase.length} files and found ${searchResults.length} relevant documents:\n\n`;
+      
+      searchResults.forEach((result, index) => {
+        response += `### ${index + 1}. ${result.fileName}\n`;
+        response += `**Relevance Score:** ${result.relevance}\n`;
+        
+        if (result.containsFish && result.containsProposal) {
+          response += `✅ **Contains both fish AND proposal content**\n`;
+        } else if (result.containsFish) {
+          response += `🐟 **Contains fish-related content**\n`;
+        } else if (result.containsProposal) {
+          response += `📝 **Contains proposal-related content**\n`;
+        }
+        
+        response += `\n**Summary:**\n${result.summary}\n\n`;
+        
+        if (result.excerpts.length > 0) {
+          response += `**Relevant Excerpts:**\n`;
+          result.excerpts.forEach(excerpt => {
+            response += `> "${excerpt}"\n\n`;
+          });
+        }
+        
+        response += `---\n\n`;
+      });
+      
+      // If no fish proposals but other fish content
+      const fishProposals = searchResults.filter(r => r.containsFish && r.containsProposal);
+      if (fishProposals.length === 0) {
+        response += `\n### 💡 Note\n`;
+        response += `I found fish-related content but no specific proposals. Would you like me to:\n`;
+        response += `- Show all fish-related documents\n`;
+        response += `- Search for other livelihood proposals\n`;
+        response += `- Focus on a specific type of fish program\n`;
+      }
+      
+      return { text: response };
+    } else {
+      // No results found
+      let response = `## 🔍 Fish Proposal Search\n\n`;
+      response += `I searched through all ${knowledgeBase.length} files but couldn't find any proposals related to fish.\n\n`;
+      
+      // List all files that were searched
+      response += `### 📁 Files Searched:\n`;
+      knowledgeBase.forEach(doc => {
+        if (!doc.name.endsWith('.csv')) {
+          response += `- ${doc.name}\n`;
+        }
+      });
+      
+      response += `\n### 💡 Suggestions:\n`;
+      response += `- Try uploading fish-related proposal documents\n`;
+      response += `- Search for other livelihood programs (e.g., "poultry", "vegetable", "small business")\n`;
+      response += `- Check if the proposals are in a different format\n`;
+      
+      return { text: response };
+    }
+  }
+  
+  // For other queries, use the existing answerQuery function
+  return answerQuery(prompt, kb);
 }
 
 // ==================== EXPORTED FUNCTIONS ====================
@@ -609,11 +780,28 @@ export async function generateContent(
     throw new Error("Groq API key is missing.");
   }
 
-  // Analyze all files
+  // Analyze all files for structure (CSV analysis)
   const kb = await analyzeAllFiles(knowledgeBase);
   
-  // Answer the query
-  const result = await answerQuery(prompt, kb);
+  // Check if this is a search query that needs content analysis
+  const promptLower = prompt.toLowerCase();
+  const needsContentSearch = 
+    promptLower.includes('proposal') || 
+    promptLower.includes('project') || 
+    promptLower.includes('program') ||
+    promptLower.includes('fish') ||
+    promptLower.includes('livelihood') ||
+    promptLower.includes('document') ||
+    promptLower.includes('file');
+  
+  let result;
+  if (needsContentSearch) {
+    // Use search that looks inside document content
+    result = await answerQueryWithSearch(prompt, kb, knowledgeBase);
+  } else {
+    // Use structural analysis (for data questions)
+    result = await answerQuery(prompt, kb);
+  }
   
   return {
     text: result.text,
