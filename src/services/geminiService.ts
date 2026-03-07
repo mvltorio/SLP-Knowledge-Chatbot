@@ -36,72 +36,507 @@ export interface KnowledgeDocument {
   type: string;
 }
 
-// ==================== TYPE DEFINITIONS ====================
-interface NameMatch {
-  matchedName: string;
-  similarity: number;
-  location?: string;
-  source: string;
+// ==================== UTILITY FUNCTIONS ====================
+
+/**
+ * Calculate Levenshtein distance between two strings
+ */
+function levenshteinDistance(a: string, b: string): number {
+  const matrix: number[][] = [];
+
+  for (let i = 0; i <= b.length; i++) {
+    matrix[i] = [i];
+  }
+  for (let j = 0; j <= a.length; j++) {
+    matrix[0][j] = j;
+  }
+
+  for (let i = 1; i <= b.length; i++) {
+    for (let j = 1; j <= a.length; j++) {
+      if (b.charAt(i - 1) === a.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j] + 1
+        );
+      }
+    }
+  }
+
+  return matrix[b.length][a.length];
 }
 
-interface NameCheckResult {
-  searchedName: string;
-  found: boolean;
-  matches: NameMatch[];
-  bestMatch?: NameMatch;
+/**
+ * Calculate similarity percentage between two strings
+ */
+function calculateSimilarity(str1: string, str2: string): number {
+  if (!str1 || !str2) return 0;
+  
+  const s1 = str1.toLowerCase().trim();
+  const s2 = str2.toLowerCase().trim();
+  
+  if (s1 === s2) return 100;
+  
+  const maxLength = Math.max(s1.length, s2.length);
+  if (maxLength === 0) return 100;
+  
+  const distance = levenshteinDistance(s1, s2);
+  const similarity = ((maxLength - distance) / maxLength) * 100;
+  
+  return Math.round(similarity * 100) / 100;
 }
 
-interface NameCheckSummary {
-  totalSearched: number;
-  totalFound: number;
-  notFound: string[];
-  potentialDuplicates: Array<{
-    name: string;
-    possibleMatches: string[];
+// ==================== COMPREHENSIVE DATA TYPES ====================
+
+interface ColumnInfo {
+  name: string;
+  possibleValues: Set<string>;
+  valueCounts: Map<string, number>;
+  dataType: 'string' | 'number' | 'boolean' | 'date' | 'unknown';
+  description: string;
+  fileSource: string;
+  sampleValues: string[];
+  totalRows: number;
+  nullCount: number;
+}
+
+interface FileAnalysis {
+  fileName: string;
+  fileType: 'csv' | 'word' | 'unknown';
+  rowCount: number;
+  columns: ColumnInfo[];
+  summary: string;
+  keyFindings: string[];
+}
+
+interface KnowledgeBase {
+  files: FileAnalysis[];
+  allColumns: Map<string, ColumnInfo[]>;
+  relationships: Array<{
+    column1: string;
+    column2: string;
+    similarity: number;
+    files: string[];
   }>;
-}
-
-interface NameCheckResponse {
-  results: NameCheckResult[];
-  summary: NameCheckSummary;
-}
-
-interface StructuredName {
-  name: string;
-  location: string;
-  gender: string;
-  source: string;
-  type: 'csv' | 'word';
-}
-
-interface SLPMember {
-  name: string;
-  barangay: string;
-  slpa: string;
-  gender: string;
-  source: string;
-}
-
-interface BarangayStats {
-  male: number;
-  female: number;
-  unknown: number;
-  total: number;
-}
-
-interface CrossReferenceResult {
-  participants: StructuredName[];
-  slpas: SLPMember[];
-  locations: Set<string>;
-  genderCount: {
-    male: number;
-    female: number;
-    unknown: number;
+  statistics: {
+    totalFiles: number;
+    totalRows: number;
+    uniqueColumns: Set<string>;
+    columnFrequency: Map<string, number>;
   };
-  barangayStats: Record<string, BarangayStats>;
+  pantawidData?: {
+    columnName: string;
+    fileSource: string;
+    yesValues: string[];
+    noValues: string[];
+    count: { yes: number; no: number; unknown: number };
+    distribution: Map<string, number>;
+  };
+  genderData?: {
+    columnName: string;
+    fileSource: string;
+    maleValues: string[];
+    femaleValues: string[];
+    count: { male: number; female: number; unknown: number };
+  };
+  locationData?: {
+    columnName: string;
+    fileSource: string;
+    locations: Set<string>;
+    counts: Map<string, number>;
+  };
 }
 
-// ==================== API VALIDATION ====================
+// ==================== FILE ANALYSIS FUNCTIONS ====================
+
+/**
+ * Parse CSV content
+ */
+function parseCSV(content: string): { headers: string[]; rows: string[][] } {
+  const lines: string[] = content.split('\n').filter((l: string) => l.trim() !== '');
+  if (lines.length === 0) return { headers: [], rows: [] };
+  
+  const headers = lines[0].split(',').map((h: string) => h.trim());
+  const rows = lines.slice(1).map((line: string) => 
+    line.split(',').map((cell: string) => cell.trim())
+  );
+  
+  return { headers, rows };
+}
+
+/**
+ * Determine data type from values
+ */
+function determineDataType(values: string[]): 'string' | 'number' | 'boolean' | 'date' | 'unknown' {
+  if (values.length === 0) return 'unknown';
+  
+  if (values.every(v => !isNaN(Number(v)) && v.trim() !== '')) {
+    return 'number';
+  }
+  
+  const booleanValues = ['yes', 'no', 'true', 'false', 'y', 'n', '1', '0'];
+  if (values.every(v => booleanValues.includes(v.toLowerCase().trim()))) {
+    return 'boolean';
+  }
+  
+  const datePattern = /^\d{1,4}[\/-]\d{1,2}[\/-]\d{1,4}$/;
+  if (values.every(v => datePattern.test(v))) {
+    return 'date';
+  }
+  
+  return 'string';
+}
+
+/**
+ * Analyze a single column
+ */
+function analyzeColumn(header: string, values: string[], totalRows: number, fileName: string): ColumnInfo {
+  const possibleValues = new Set<string>();
+  const valueCounts = new Map<string, number>();
+  let nullCount = 0;
+  
+  values.forEach(value => {
+    if (!value || value === '') {
+      nullCount++;
+    } else {
+      possibleValues.add(value);
+      valueCounts.set(value, (valueCounts.get(value) || 0) + 1);
+    }
+  });
+  
+  const sampleValues = Array.from(possibleValues).slice(0, 10);
+  const dataType = determineDataType(Array.from(possibleValues));
+  
+  let description = '';
+  const headerLower = header.toLowerCase();
+  
+  if (headerLower.includes('pantawid') || headerLower.includes('4ps') || headerLower.includes('conditional cash')) {
+    description = 'Indicates Pantawid Pamilya Program (4Ps) membership status';
+  } else if (headerLower.includes('name') || headerLower.includes('beneficiary')) {
+    description = 'Name of the person';
+  } else if (headerLower.includes('sex') || headerLower.includes('gender')) {
+    description = 'Gender of the person';
+  } else if (headerLower.includes('barangay') || headerLower.includes('location') || headerLower.includes('address')) {
+    description = 'Geographic location or barangay';
+  } else if (headerLower.includes('age')) {
+    description = 'Age of the person';
+  } else if (headerLower.includes('birth') || headerLower.includes('dob')) {
+    description = 'Date of birth';
+  } else if (headerLower.includes('slpa') || headerLower.includes('association')) {
+    description = 'SLPA association or membership';
+  } else {
+    description = `Column containing ${dataType} data`;
+  }
+  
+  return {
+    name: header,
+    possibleValues,
+    valueCounts,
+    dataType,
+    description,
+    fileSource: fileName,
+    sampleValues,
+    totalRows,
+    nullCount
+  };
+}
+
+/**
+ * Analyze a Word document
+ */
+function analyzeWordDocument(doc: KnowledgeDocument): FileAnalysis {
+  const lines = doc.content.split('\n');
+  const analysis: FileAnalysis = {
+    fileName: doc.name,
+    fileType: 'word',
+    rowCount: lines.length,
+    columns: [],
+    summary: '',
+    keyFindings: []
+  };
+  
+  const namePattern = /[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+/g;
+  const names = doc.content.match(namePattern) || [];
+  
+  const barangayPattern = /Brgy\.?\s*([A-Za-z\s]+)|Barangay\s+([A-Za-z\s]+)/gi;
+  const barangays = doc.content.match(barangayPattern) || [];
+  
+  const slpaPattern = /SLPA|Sustainable Livelihood Program Association/gi;
+  const slpaMentions = doc.content.match(slpaPattern) || [];
+  
+  analysis.keyFindings.push(`Contains approximately ${names.length} names`);
+  if (barangays.length > 0) {
+    analysis.keyFindings.push(`References barangays: ${Array.from(new Set(barangays)).slice(0, 5).join(', ')}`);
+  }
+  if (slpaMentions.length > 0) {
+    analysis.keyFindings.push(`Contains SLPA-related content`);
+  }
+  
+  analysis.summary = `Word document with ${lines.length} lines. ${analysis.keyFindings.join('. ')}`;
+  
+  return analysis;
+}
+
+/**
+ * Analyze all files to build knowledge base
+ */
+async function analyzeAllFiles(knowledgeBase: KnowledgeDocument[]): Promise<KnowledgeBase> {
+  const kb: KnowledgeBase = {
+    files: [],
+    allColumns: new Map(),
+    relationships: [],
+    statistics: {
+      totalFiles: knowledgeBase.length,
+      totalRows: 0,
+      uniqueColumns: new Set(),
+      columnFrequency: new Map()
+    }
+  };
+  
+  knowledgeBase.forEach((doc: KnowledgeDocument) => {
+    if (doc.name.endsWith('.csv')) {
+      const { headers, rows } = parseCSV(doc.content);
+      
+      const fileAnalysis: FileAnalysis = {
+        fileName: doc.name,
+        fileType: 'csv',
+        rowCount: rows.length,
+        columns: [],
+        summary: '',
+        keyFindings: []
+      };
+      
+      kb.statistics.totalRows += rows.length;
+      
+      headers.forEach((header: string, index: number) => {
+        const values = rows.map(row => row[index] || '');
+        const columnInfo = analyzeColumn(header, values, rows.length, doc.name);
+        fileAnalysis.columns.push(columnInfo);
+        
+        kb.statistics.uniqueColumns.add(header);
+        kb.statistics.columnFrequency.set(header, (kb.statistics.columnFrequency.get(header) || 0) + 1);
+        
+        if (!kb.allColumns.has(header)) {
+          kb.allColumns.set(header, []);
+        }
+        kb.allColumns.get(header)!.push(columnInfo);
+      });
+      
+      fileAnalysis.summary = `CSV file with ${rows.length} rows and ${headers.length} columns: ${headers.join(', ')}`;
+      
+      headers.forEach((header: string) => {
+        const headerLower = header.toLowerCase();
+        
+        if (headerLower.includes('pantawid') || headerLower.includes('4ps')) {
+          const values = rows.map(row => row[headers.indexOf(header)] || '');
+          const yesCount = values.filter(v => 
+            v.toLowerCase() === 'yes' || v === '1' || v.toLowerCase().includes('yes')
+          ).length;
+          const noCount = values.filter(v => 
+            v.toLowerCase() === 'no' || v === '0' || v.toLowerCase().includes('no')
+          ).length;
+          
+          kb.pantawidData = {
+            columnName: header,
+            fileSource: doc.name,
+            yesValues: ['yes', '1', 'Yes', 'YES'].filter(v => values.includes(v)),
+            noValues: ['no', '0', 'No', 'NO'].filter(v => values.includes(v)),
+            count: {
+              yes: yesCount,
+              no: noCount,
+              unknown: rows.length - yesCount - noCount
+            },
+            distribution: new Map()
+          };
+          
+          fileAnalysis.keyFindings.push(`Contains Pantawid data: ${yesCount} beneficiaries`);
+        }
+        
+        if (headerLower.includes('sex') || headerLower.includes('gender')) {
+          const values = rows.map(row => row[headers.indexOf(header)] || '');
+          const maleCount = values.filter(v => 
+            v.toLowerCase() === 'male' || v === 'm' || v.toLowerCase() === 'man'
+          ).length;
+          const femaleCount = values.filter(v => 
+            v.toLowerCase() === 'female' || v === 'f' || v.toLowerCase() === 'woman'
+          ).length;
+          
+          kb.genderData = {
+            columnName: header,
+            fileSource: doc.name,
+            maleValues: ['male', 'm', 'Male', 'M'],
+            femaleValues: ['female', 'f', 'Female', 'F'],
+            count: {
+              male: maleCount,
+              female: femaleCount,
+              unknown: rows.length - maleCount - femaleCount
+            }
+          };
+        }
+        
+        if (headerLower.includes('barangay') || headerLower.includes('location') || headerLower.includes('address')) {
+          const values = rows.map(row => row[headers.indexOf(header)] || '').filter(v => v);
+          const locations = new Set(values);
+          const counts = new Map();
+          values.forEach(v => counts.set(v, (counts.get(v) || 0) + 1));
+          
+          kb.locationData = {
+            columnName: header,
+            fileSource: doc.name,
+            locations,
+            counts
+          };
+        }
+      });
+      
+      kb.files.push(fileAnalysis);
+      
+    } else if (doc.name.includes('.doc')) {
+      const fileAnalysis = analyzeWordDocument(doc);
+      kb.files.push(fileAnalysis);
+    }
+  });
+  
+  const allColumnNames = Array.from(kb.statistics.uniqueColumns);
+  for (let i = 0; i < allColumnNames.length; i++) {
+    for (let j = i + 1; j < allColumnNames.length; j++) {
+      const col1 = allColumnNames[i];
+      const col2 = allColumnNames[j];
+      
+      const similarity = calculateSimilarity(col1, col2);
+      if (similarity > 80) {
+        kb.relationships.push({
+          column1: col1,
+          column2: col2,
+          similarity,
+          files: Array.from(new Set([
+            ...(kb.allColumns.get(col1) || []).map(c => c.fileSource),
+            ...(kb.allColumns.get(col2) || []).map(c => c.fileSource)
+          ]))
+        });
+      }
+    }
+  }
+  
+  return kb;
+}
+
+/**
+ * Generate knowledge summary
+ */
+function generateKnowledgeSummary(kb: KnowledgeBase): string {
+  let summary = `## 📊 Complete Data Analysis\n\n`;
+  
+  summary += `### 📁 Files Overview\n`;
+  summary += `- **Total files:** ${kb.statistics.totalFiles}\n`;
+  summary += `- **Total rows of data:** ${kb.statistics.totalRows.toLocaleString()}\n`;
+  summary += `- **Unique columns found:** ${kb.statistics.uniqueColumns.size}\n\n`;
+  
+  if (kb.pantawidData) {
+    summary += `\n### 🎯 Pantawid Pamilya Program Data\n`;
+    summary += `Found in column: **${kb.pantawidData.columnName}** (from ${kb.pantawidData.fileSource})\n`;
+    summary += `- **Pantawid beneficiaries:** ${kb.pantawidData.count.yes}\n`;
+    summary += `- **Non-Pantawid:** ${kb.pantawidData.count.no}\n`;
+    summary += `- **Unknown status:** ${kb.pantawidData.count.unknown}\n`;
+  }
+  
+  if (kb.genderData) {
+    summary += `\n### 👥 Gender Distribution\n`;
+    summary += `Found in column: **${kb.genderData.columnName}** (from ${kb.genderData.fileSource})\n`;
+    summary += `- **Male:** ${kb.genderData.count.male}\n`;
+    summary += `- **Female:** ${kb.genderData.count.female}\n`;
+    summary += `- **Unknown:** ${kb.genderData.count.unknown}\n`;
+  }
+  
+  if (kb.locationData) {
+    summary += `\n### 📍 Location Data\n`;
+    summary += `Found in column: **${kb.locationData.columnName}** (from ${kb.locationData.fileSource})\n`;
+    summary += `- **Unique locations:** ${kb.locationData.locations.size}\n`;
+  }
+  
+  return summary;
+}
+
+/**
+ * Answer query based on knowledge base
+ */
+async function answerQuery(prompt: string, kb: KnowledgeBase): Promise<{ text: string; chart?: ChartSpec }> {
+  const promptLower = prompt.toLowerCase();
+  
+  if (promptLower.includes('pantawid') || promptLower.includes('4ps') || promptLower.includes('served')) {
+    if (kb.pantawidData) {
+      const data = kb.pantawidData;
+      
+      let response = `## 🎯 Pantawid Pamilya Program Analysis\n\n`;
+      response += `Based on analysis of your files:\n\n`;
+      response += `### 📊 Summary\n`;
+      response += `- **Total beneficiaries:** ${data.count.yes + data.count.no + data.count.unknown}\n`;
+      response += `- **Pantawid beneficiaries served:** ${data.count.yes}\n`;
+      response += `- **Non-Pantawid beneficiaries:** ${data.count.no}\n`;
+      response += `- **Unknown status:** ${data.count.unknown}\n\n`;
+      
+      response += `### 📁 Data Source\n`;
+      response += `Column "${data.columnName}" in file: **${data.fileSource}**\n`;
+      
+      const chartData = [
+        { name: 'Pantawid', value: data.count.yes },
+        { name: 'Non-Pantawid', value: data.count.no },
+        { name: 'Unknown', value: data.count.unknown }
+      ].filter(item => item.value > 0);
+      
+      const chart: ChartSpec = {
+        chartType: 'pie',
+        title: 'Pantawid Pamilya Program Distribution',
+        data: chartData,
+        dataKey: 'value'
+      };
+      
+      return { text: response, chart };
+    } else {
+      let response = `## 🔍 Pantawid Data Search\n\n`;
+      response += `I couldn't find a specific "Pantawid" column in your files.\n\n`;
+      response += `### 📁 Available Data:\n\n`;
+      response += generateKnowledgeSummary(kb);
+      
+      return { text: response };
+    }
+  }
+  
+  if (promptLower.includes('gender') || promptLower.includes('male') || promptLower.includes('female')) {
+    if (kb.genderData) {
+      const data = kb.genderData;
+      
+      let response = `## 👥 Gender Distribution\n\n`;
+      response += `- **Male:** ${data.count.male}\n`;
+      response += `- **Female:** ${data.count.female}\n`;
+      response += `- **Unknown:** ${data.count.unknown}\n`;
+      response += `- **Total:** ${data.count.male + data.count.female + data.count.unknown}\n\n`;
+      response += `Source: ${data.fileSource} (column: ${data.columnName})`;
+      
+      const chartData = [
+        { name: 'Male', value: data.count.male },
+        { name: 'Female', value: data.count.female },
+        { name: 'Unknown', value: data.count.unknown }
+      ].filter(item => item.value > 0);
+      
+      const chart: ChartSpec = {
+        chartType: 'pie',
+        title: 'Gender Distribution',
+        data: chartData,
+        dataKey: 'value'
+      };
+      
+      return { text: response, chart };
+    }
+  }
+  
+  return { text: generateKnowledgeSummary(kb) };
+}
+
+// ==================== EXPORTED FUNCTIONS ====================
+
 export async function validateApiKey(): Promise<boolean> {
   try {
     const apiKey = getApiKey();
@@ -124,528 +559,11 @@ export async function validateApiKey(): Promise<boolean> {
   }
 }
 
-// ==================== LEVENSHTEIN DISTANCE FOR FUZZY MATCHING ====================
-
-/**
- * Calculate Levenshtein distance between two strings
- * Lower number = more similar (0 means identical)
- */
-function levenshteinDistance(a: string, b: string): number {
-  const matrix: number[][] = [];
-
-  // Initialize matrix
-  for (let i = 0; i <= b.length; i++) {
-    matrix[i] = [i];
-  }
-  for (let j = 0; j <= a.length; j++) {
-    matrix[0][j] = j;
-  }
-
-  // Fill matrix
-  for (let i = 1; i <= b.length; i++) {
-    for (let j = 1; j <= a.length; j++) {
-      if (b.charAt(i - 1) === a.charAt(j - 1)) {
-        matrix[i][j] = matrix[i - 1][j - 1];
-      } else {
-        matrix[i][j] = Math.min(
-          matrix[i - 1][j - 1] + 1, // substitution
-          matrix[i][j - 1] + 1,     // insertion
-          matrix[i - 1][j] + 1      // deletion
-        );
-      }
-    }
-  }
-
-  return matrix[b.length][a.length];
-}
-
-/**
- * Calculate similarity percentage between two strings
- * 100% = identical, 0% = completely different
- */
-function calculateSimilarity(str1: string, str2: string): number {
-  if (!str1 || !str2) return 0;
-  
-  const s1 = str1.toLowerCase().trim();
-  const s2 = str2.toLowerCase().trim();
-  
-  if (s1 === s2) return 100;
-  
-  const maxLength = Math.max(s1.length, s2.length);
-  if (maxLength === 0) return 100;
-  
-  const distance = levenshteinDistance(s1, s2);
-  const similarity = ((maxLength - distance) / maxLength) * 100;
-  
-  return Math.round(similarity * 100) / 100;
-}
-
-/**
- * Find best match for a name in a list of names using fuzzy matching
- */
-function findBestMatch(
-  searchName: string, 
-  nameList: string[], 
-  threshold: number = 70
-): { match: string | null; similarity: number; index: number } {
-  if (!searchName || nameList.length === 0) {
-    return { match: null, similarity: 0, index: -1 };
-  }
-  
-  let bestMatch = { match: null as string | null, similarity: 0, index: -1 };
-  
-  nameList.forEach((name, index) => {
-    const similarity = calculateSimilarity(searchName, name);
-    if (similarity > bestMatch.similarity && similarity >= threshold) {
-      bestMatch = { match: name, similarity, index };
-    }
-  });
-  
-  return bestMatch;
-}
-
-/**
- * Check for duplicate names in a list using fuzzy matching
- */
-function findDuplicates(
-  names: string[], 
-  threshold: number = 85
-): Array<{ original: string; duplicates: string[]; similarity: number }> {
-  const duplicates: Array<{ original: string; duplicates: string[]; similarity: number }> = [];
-  const processed = new Set<number>();
-  
-  for (let i = 0; i < names.length; i++) {
-    if (processed.has(i)) continue;
-    
-    const currentName = names[i];
-    const currentDuplicates: string[] = [];
-    let highestSimilarity = 0;
-    
-    for (let j = i + 1; j < names.length; j++) {
-      if (processed.has(j)) continue;
-      
-      const similarity = calculateSimilarity(currentName, names[j]);
-      if (similarity >= threshold) {
-        currentDuplicates.push(names[j]);
-        processed.add(j);
-        highestSimilarity = Math.max(highestSimilarity, similarity);
-      }
-    }
-    
-    if (currentDuplicates.length > 0) {
-      duplicates.push({
-        original: currentName,
-        duplicates: currentDuplicates,
-        similarity: highestSimilarity
-      });
-    }
-    
-    processed.add(i);
-  }
-  
-  return duplicates;
-}
-
-// ==================== NAME EXTRACTION ====================
-
-/**
- * Extract all names from documents
- */
-function extractAllNames(documents: KnowledgeDocument[]): string[] {
-  const names: string[] = [];
-  const namePattern = /[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+/g;
-  
-  documents.forEach((doc: KnowledgeDocument) => {
-    const matches = doc.content.match(namePattern) || [];
-    matches.forEach((name: string) => {
-      if (name.length > 5 && 
-          !name.includes('Document') && 
-          !name.includes('Microsoft') &&
-          !name.includes('Word') &&
-          !name.includes('Excel')) {
-        names.push(name);
-      }
-    });
-  });
-  
-  return names;
-}
-
-/**
- * Extract names with their associated data (location, gender, etc.)
- */
-function extractStructuredNames(documents: KnowledgeDocument[]): StructuredName[] {
-  const structuredNames: StructuredName[] = [];
-  
-  documents.forEach((doc: KnowledgeDocument) => {
-    const lines: string[] = doc.content.split('\n');
-    
-    // Try to parse CSV structure
-    if (doc.name.endsWith('.csv')) {
-      const headers: string[] = lines[0]?.split(',').map((h: string) => h.trim()) || [];
-      const nameColIndex: number = headers.findIndex((h: string) => 
-        h.toLowerCase().includes('name') || 
-        h.toLowerCase().includes('beneficiary') ||
-        h.toLowerCase().includes('participant')
-      );
-      
-      const locationColIndex: number = headers.findIndex((h: string) => 
-        h.toLowerCase().includes('location') ||
-        h.toLowerCase().includes('municipality') ||
-        h.toLowerCase().includes('barangay')
-      );
-      
-      const genderColIndex: number = headers.findIndex((h: string) => 
-        h.toLowerCase().includes('sex') ||
-        h.toLowerCase().includes('gender')
-      );
-      
-      if (nameColIndex >= 0) {
-        for (let i = 1; i < Math.min(lines.length, 100); i++) {
-          const row: string[] = lines[i].split(',').map((c: string) => c.trim());
-          if (row[nameColIndex] && row[nameColIndex].length > 3) {
-            structuredNames.push({
-              name: row[nameColIndex],
-              location: locationColIndex >= 0 ? row[locationColIndex] : 'unknown',
-              gender: genderColIndex >= 0 ? row[genderColIndex] : 'unknown',
-              source: doc.name,
-              type: 'csv'
-            });
-          }
-        }
-      }
-    } 
-    // Try to parse Word documents for names
-    else if (doc.name.includes('.doc')) {
-      const namePattern = /[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+/g;
-      const matches: string[] = doc.content.match(namePattern) || [];
-      
-      // Try to extract barangay from content
-      let currentBarangay: string = 'unknown';
-      const barangayMatch: RegExpMatchArray | null = doc.content.match(/Brgy\.?\s*([A-Za-z]+)/i) ||
-                           doc.content.match(/Barangay\s+([A-Za-z]+)/i);
-      if (barangayMatch) {
-        currentBarangay = barangayMatch[1];
-      }
-      
-      matches.forEach((name: string) => {
-        if (name.length > 5 && 
-            !name.includes('Document') && 
-            !name.includes('Microsoft')) {
-          structuredNames.push({
-            name,
-            location: currentBarangay,
-            gender: 'unknown',
-            source: doc.name,
-            type: 'word'
-          });
-        }
-      });
-    }
-  });
-  
-  return structuredNames;
-}
-
-// ==================== NAME CHECKING FUNCTION ====================
-
-/**
- * Check if a list of names are served in SLP
- */
-export async function checkNamesInSLP(
-  namesToCheck: string[],
-  documents: KnowledgeDocument[]
-): Promise<NameCheckResponse> {
-  const allNames: StructuredName[] = extractStructuredNames(documents);
-  const nameList: string[] = allNames.map((n: StructuredName) => n.name);
-  
-  const results: NameCheckResult[] = [];
-  const notFound: string[] = [];
-  
-  for (const searchName of namesToCheck) {
-    const matches: NameMatch[] = [];
-    
-    allNames.forEach((item: StructuredName) => {
-      const similarity: number = calculateSimilarity(searchName, item.name);
-      if (similarity >= 70) {
-        matches.push({
-          matchedName: item.name,
-          similarity,
-          location: item.location,
-          source: item.source
-        });
-      }
-    });
-    
-    matches.sort((a: NameMatch, b: NameMatch) => b.similarity - a.similarity);
-    
-    const found: boolean = matches.length > 0;
-    if (!found) {
-      notFound.push(searchName);
-    }
-    
-    results.push({
-      searchedName: searchName,
-      found,
-      matches: matches.slice(0, 5),
-      bestMatch: matches[0]
-    });
-  }
-  
-  const potentialDuplicates = findDuplicates(nameList, 85).map(d => ({
-    name: d.original,
-    possibleMatches: d.duplicates
-  }));
-  
-  return {
-    results,
-    summary: {
-      totalSearched: namesToCheck.length,
-      totalFound: results.filter((r: NameCheckResult) => r.found).length,
-      notFound,
-      potentialDuplicates
-    }
-  };
-}
-
-// ==================== SMART DATA EXTRACTION ====================
-
-/**
- * Parse CSV content
- */
-function parseCSV(content: string): { headers: string[]; rows: string[][] } {
-  const lines: string[] = content.split('\n').filter((l: string) => l.trim() !== '');
-  if (lines.length === 0) return { headers: [], rows: [] };
-  
-  const headers: string[] = lines[0].split(',').map((h: string) => h.trim());
-  const rows: string[][] = lines.slice(1).map((line: string) => 
-    line.split(',').map((cell: string) => cell.trim())
-  );
-  
-  return { headers, rows };
-}
-
-/**
- * Extract SLPA member data from Word documents
- */
-function extractSLPMembers(content: string, filename: string): SLPMember[] {
-  const members: SLPMember[] = [];
-  
-  // Try to extract barangay from filename or content
-  let currentBarangay: string = 'unknown';
-  const barangayMatch: RegExpMatchArray | null = filename.match(/([A-Za-z]+)\s+(?:Dilasag|Aurora)/i) || 
-                       content.match(/Brgy\.?\s*([A-Za-z]+)/i) ||
-                       content.match(/Barangay\s+([A-Za-z]+)/i);
-  
-  if (barangayMatch) {
-    currentBarangay = barangayMatch[1];
-  }
-  
-  // Try to extract SLPA name
-  let currentSLPAName: string = 'unknown';
-  const slpaNameMatch: RegExpMatchArray | null = content.match(/([A-Z\s]+SLPA)/i);
-  if (slpaNameMatch) {
-    currentSLPAName = slpaNameMatch[1];
-  }
-  
-  // Look for names
-  const namePattern = /[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+/g;
-  const names: string[] = content.match(namePattern) || [];
-  
-  // Simple gender detection
-  const femaleIndicators: string[] = ['Florita', 'Merlinda', 'Raquel', 'Jerryrose', 'Winie', 'Elma', 'Marjory', 'Julie', 'Carmelita', 'Prescilla', 'Maria', 'Rose', 'Ann', 'Lyn'];
-  const maleIndicators: string[] = ['Nonilon', 'Bernardo', 'Rodel', 'Gabriel', 'Juan', 'Pedro', 'Jose', 'Manuel', 'Carlos'];
-  
-  names.forEach((name: string) => {
-    if (name.length > 5 && !name.includes('Document') && !name.includes('Microsoft') && !name.includes('Word')) {
-      let gender: string = 'unknown';
-      const firstName: string = name.split(' ')[0];
-      
-      if (femaleIndicators.some((i: string) => firstName.includes(i))) {
-        gender = 'female';
-      } else if (maleIndicators.some((i: string) => firstName.includes(i))) {
-        gender = 'male';
-      }
-      
-      members.push({
-        name,
-        barangay: currentBarangay,
-        slpa: currentSLPAName,
-        gender,
-        source: filename
-      });
-    }
-  });
-  
-  return members;
-}
-
-/**
- * Cross-reference data between different document types
- */
-function crossReferenceData(documents: KnowledgeDocument[], query: string): CrossReferenceResult {
-  const result: CrossReferenceResult = {
-    participants: [],
-    slpas: [],
-    locations: new Set<string>(),
-    genderCount: { male: 0, female: 0, unknown: 0 },
-    barangayStats: {}
-  };
-  
-  // Extract location from query if present
-  let targetLocation: string = '';
-  const locationMatch: RegExpMatchArray | null = query.match(/(?:in|at)\s+([A-Za-z\s]+?)(?:\s+aurora|\s*$)/i) ||
-                       query.match(/([A-Za-z\s]+?)\s+aurora/i);
-  if (locationMatch) {
-    targetLocation = locationMatch[1].toLowerCase().trim();
-  }
-  
-  // Separate CSV and Word docs
-  const csvDocs: KnowledgeDocument[] = documents.filter((d: KnowledgeDocument) => d.name.endsWith('.csv'));
-  const wordDocs: KnowledgeDocument[] = documents.filter((d: KnowledgeDocument) => d.name.includes('.doc'));
-  
-  // Process CSV for participant data
-  csvDocs.forEach((doc: KnowledgeDocument) => {
-    const { headers, rows } = parseCSV(doc.content);
-    
-    const locationCol: number = headers.findIndex((h: string) => 
-      h.toLowerCase().includes('location') || 
-      h.toLowerCase().includes('municipality') || 
-      h.toLowerCase().includes('barangay') ||
-      h.toLowerCase().includes('address')
-    );
-    
-    const sexCol: number = headers.findIndex((h: string) => 
-      h.toLowerCase().includes('sex') || 
-      h.toLowerCase().includes('gender')
-    );
-    
-    const nameCol: number = headers.findIndex((h: string) => 
-      h.toLowerCase().includes('name') || 
-      h.toLowerCase().includes('beneficiary') ||
-      h.toLowerCase().includes('participant')
-    );
-    
-    rows.forEach((row: string[]) => {
-      let locationMatch: boolean = true;
-      if (targetLocation && locationCol >= 0) {
-        const rowLocation: string = (row[locationCol] || '').toLowerCase();
-        locationMatch = rowLocation.includes(targetLocation) ||
-                       calculateSimilarity(rowLocation, targetLocation) > 80;
-      }
-      
-      if (locationMatch) {
-        const gender: string = sexCol >= 0 ? (row[sexCol] || '').toLowerCase() : 'unknown';
-        const name: string = nameCol >= 0 ? (row[nameCol] || 'Unknown') : 'Unknown';
-        
-        const participant: StructuredName = {
-          name,
-          gender,
-          location: locationCol >= 0 ? (row[locationCol] || 'unknown') : 'unknown',
-          source: doc.name,
-          type: 'csv'
-        };
-        
-        result.participants.push(participant);
-        
-        if (gender.includes('female') || gender.includes('woman') || gender === 'f') {
-          result.genderCount.female++;
-        } else if (gender.includes('male') || gender.includes('man') || gender === 'm') {
-          result.genderCount.male++;
-        } else {
-          result.genderCount.unknown++;
-        }
-        
-        if (locationCol >= 0 && row[locationCol]) {
-          result.locations.add(row[locationCol]);
-        }
-      }
-    });
-  });
-  
-  // Process Word docs for SLPA member data
-  wordDocs.forEach((doc: KnowledgeDocument) => {
-    const members: SLPMember[] = extractSLPMembers(doc.content, doc.name);
-    
-    members.forEach((member: SLPMember) => {
-      let locationMatch: boolean = true;
-      if (targetLocation) {
-        const memberLocation: string = (member.barangay || '').toLowerCase();
-        locationMatch = memberLocation.includes(targetLocation) ||
-                       calculateSimilarity(memberLocation, targetLocation) > 80;
-      }
-      
-      if (locationMatch) {
-        result.slpas.push(member);
-        
-        if (member.barangay) {
-          if (!result.barangayStats[member.barangay]) {
-            result.barangayStats[member.barangay] = { male: 0, female: 0, unknown: 0, total: 0 };
-          }
-          
-          if (member.gender === 'male') {
-            result.barangayStats[member.barangay].male++;
-            result.genderCount.male++;
-          } else if (member.gender === 'female') {
-            result.barangayStats[member.barangay].female++;
-            result.genderCount.female++;
-          } else {
-            result.barangayStats[member.barangay].unknown++;
-            result.genderCount.unknown++;
-          }
-          
-          result.barangayStats[member.barangay].total++;
-        }
-      }
-    });
-  });
-  
-  return result;
-}
-
-// ==================== CHART CREATION ====================
-
-/**
- * Creates a chart specification based on the data
- * Matches the ChartSpec type from your types file
- */
-function createChartSpec(data: CrossReferenceResult, location: string): ChartSpec | undefined {
-  if (data.genderCount.male === 0 && data.genderCount.female === 0) {
-    return undefined;
-  }
-
-  // Create chart data array of { name: string, value: number } objects
-  const chartData: Array<{ name: string; value: number }> = [
-    { name: 'Male', value: data.genderCount.male },
-    { name: 'Female', value: data.genderCount.female },
-    { name: 'Unknown', value: data.genderCount.unknown }
-  ].filter((item: { name: string; value: number }) => item.value > 0); // Only include categories with data
-
-  // Choose chart type based on data characteristics
-  let chartType: 'bar' | 'pie' | 'line' = 'bar';
-  
-  // If we have few categories, use pie chart for better visualization
-  if (chartData.length <= 5) {
-    chartType = 'pie';
-  }
-
-  const chartSpec: ChartSpec = {
-    chartType: chartType,
-    title: `Gender Distribution${location ? ` in ${location}` : ''}`,
-    data: chartData,
-    dataKey: 'value'
-  };
-
-  return chartSpec;
-}
-
-// ==================== IMAGE ANALYSIS ====================
-
 export async function analyzeImage(file: File, customKey?: string): Promise<string> {
   try {
     const apiKey = getApiKey(customKey);
     
-    const fileContent: string | null = await readFileContent(file).catch(() => null);
+    const fileContent = await readFileContent(file).catch(() => null);
     
     if (fileContent) {
       const groq = new Groq({
@@ -670,17 +588,13 @@ export async function analyzeImage(file: File, customKey?: string): Promise<stri
 
     return `[File: ${file.name}]
 Size: ${(file.size / 1024).toFixed(2)} KB
-Type: ${file.type || 'Unknown'}
-
-To analyze this file's content, it would need to be a text-based format.`;
+Type: ${file.type || 'Unknown'}`;
 
   } catch (error) {
     console.error("File analysis error:", error);
     return `Could not analyze the file "${file.name}".`;
   }
 }
-
-// ==================== MAIN GENERATE FUNCTION ====================
 
 export async function generateContent(
   prompt: string,
@@ -695,153 +609,14 @@ export async function generateContent(
     throw new Error("Groq API key is missing.");
   }
 
-  // Check if this is a name checking query
-  const isNameCheckQuery: boolean = prompt.toLowerCase().includes('check these names') ||
-                           prompt.toLowerCase().includes('check if') ||
-                           prompt.toLowerCase().includes('are served') ||
-                           prompt.toLowerCase().includes('verify these names');
-
-  if (isNameCheckQuery) {
-    // Extract names from the prompt
-    const namePattern = /[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+/g;
-    const namesToCheck: string[] = prompt.match(namePattern) || [];
-    
-    if (namesToCheck.length > 0) {
-      const nameCheckResult: NameCheckResponse = await checkNamesInSLP(namesToCheck, knowledgeBase);
-      
-      // Format the response
-      let response: string = `## Name Verification Results\n\n`;
-      
-      nameCheckResult.results.forEach((result: NameCheckResult) => {
-        if (result.found && result.bestMatch) {
-          response += `✅ **${result.searchedName}** - FOUND (${result.bestMatch.similarity.toFixed(1)}% match)\n`;
-          response += `   Matched with: "${result.bestMatch.matchedName}"\n`;
-          if (result.bestMatch.location) {
-            response += `   Location: ${result.bestMatch.location}\n`;
-          }
-          response += `   Source: ${result.bestMatch.source}\n\n`;
-        } else {
-          response += `❌ **${result.searchedName}** - NOT FOUND\n`;
-          if (result.matches.length > 0) {
-            response += `   Similar names found:\n`;
-            result.matches.slice(0, 3).forEach((m: NameMatch) => {
-              response += `   • "${m.matchedName}" (${m.similarity.toFixed(1)}% similar)\n`;
-            });
-          }
-          response += '\n';
-        }
-      });
-      
-      response += `\n### Summary\n`;
-      response += `- Total names checked: ${nameCheckResult.summary.totalSearched}\n`;
-      response += `- Found: ${nameCheckResult.summary.totalFound}\n`;
-      response += `- Not found: ${nameCheckResult.summary.notFound.length}\n`;
-      
-      if (nameCheckResult.summary.potentialDuplicates.length > 0) {
-        response += `\n### Potential Duplicates in Database\n`;
-        nameCheckResult.summary.potentialDuplicates.slice(0, 5).forEach(d => {
-          response += `- "${d.name}" may be duplicate with: ${d.possibleMatches.join(', ')}\n`;
-        });
-      }
-      
-      return { text: response };
-    }
-  }
-
-  // Regular query processing
-  const crossReferenced: CrossReferenceResult = crossReferenceData(knowledgeBase, prompt);
+  // Analyze all files
+  const kb = await analyzeAllFiles(knowledgeBase);
   
-  // Extract location for chart title
-  let location: string = '';
-  const locationMatch: RegExpMatchArray | null = prompt.match(/(?:in|at)\s+([A-Za-z\s]+?)(?:\s+aurora|\s*$)/i) ||
-                       prompt.match(/([A-Za-z\s]+?)\s+aurora/i);
-  if (locationMatch) {
-    location = locationMatch[1].trim();
-  }
+  // Answer the query
+  const result = await answerQuery(prompt, kb);
   
-  // Create chart if there's gender data
-  const chart: ChartSpec | undefined = createChartSpec(crossReferenced, location);
-  
-  // Build context for the AI
-  const context: string = `
-## Data Summary
-- Total participants found: ${crossReferenced.participants.length}
-- Total SLPA members found: ${crossReferenced.slpas.length}
-- Locations found: ${Array.from(crossReferenced.locations).join(', ') || 'Dilasag, Aurora'}
-- Gender breakdown: 
-  - Male: ${crossReferenced.genderCount.male}
-  - Female: ${crossReferenced.genderCount.female}
-  - Unknown: ${crossReferenced.genderCount.unknown}
-
-## Barangay Statistics
-${Object.entries(crossReferenced.barangayStats).map(([barangay, stats]) => 
-  `- ${barangay}: ${(stats as BarangayStats).total} total (Male: ${(stats as BarangayStats).male}, Female: ${(stats as BarangayStats).female})`
-).join('\n')}
-
-## Data Sources
-- CSV files: ${knowledgeBase.filter((d: KnowledgeDocument) => d.name.endsWith('.csv')).map((d: KnowledgeDocument) => d.name).join(', ')}
-- Word documents: ${knowledgeBase.filter((d: KnowledgeDocument) => d.name.includes('.doc')).map((d: KnowledgeDocument) => d.name).join(', ')}
-`;
-
-  const systemPrompt: string = `You are an expert SLP data analyst. Based on the provided data, answer the user's question.
-
-User Question: ${prompt}
-
-${context}
-
-Instructions:
-1. If asking for counts (like "how many women and men"), provide EXACT numbers from the data
-2. For location-specific questions, filter to that location
-3. If data is incomplete, explain what's missing and show what IS available
-4. Use fuzzy matching to connect related information across different files
-5. Be specific about which files the data came from
-6. If you find names that are similar but not exact matches, mention them
-
-Response should be a clear, helpful answer with specific numbers.`;
-
-  try {
-    const groq = new Groq({
-      apiKey,
-      dangerouslyAllowBrowser: true
-    });
-
-    const completion = await groq.chat.completions.create({
-      model: PRIMARY_MODEL,
-      messages: [
-        {
-          role: "system",
-          content: "You are an expert data analyst that provides accurate counts from documents. Always mention which files you got the data from."
-        },
-        {
-          role: "user",
-          content: systemPrompt
-        }
-      ],
-      temperature: 0.1,
-      max_tokens: 2048
-    });
-
-    const responseText: string = completion.choices?.[0]?.message?.content || "";
-    
-    return {
-      text: responseText,
-      chart: chart
-    };
-
-  } catch (error: any) {
-    console.error("Error:", error);
-    
-    const locations: string = Array.from(crossReferenced.locations).join(', ') || 'Dilasag, Aurora';
-    return {
-      text: `Based on the data I found in your uploaded files:\n\n` +
-            `**Total participants:** ${crossReferenced.participants.length + crossReferenced.slpas.length}\n` +
-            `**Men:** ${crossReferenced.genderCount.male}\n` +
-            `**Women:** ${crossReferenced.genderCount.female}\n` +
-            `**Unknown gender:** ${crossReferenced.genderCount.unknown}\n\n` +
-            `**Locations:** ${locations}\n\n` +
-            `This data comes from ${crossReferenced.participants.length + crossReferenced.slpas.length} records across your CSV files and Word documents.\n\n` +
-            `*Note: I used fuzzy matching to connect related information across different file types.*`,
-      chart
-    };
-  }
+  return {
+    text: result.text,
+    chart: result.chart
+  };
 }
