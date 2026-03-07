@@ -787,22 +787,28 @@ export async function generateContent(
     }
   }
   
-// Build context from analyzed files
-// Build context from analyzed files
-let context = `DATA FROM USER FILES:\n\n`;
+// Build context using REAL document content
+let context = `DOCUMENT CONTENT FROM USER FILES:\n\n`;
 
-kb.files.forEach(file => {
-  context += `File: ${file.fileName}\n`;
-  context += `Summary: ${file.summary}\n`;
+knowledgeBase.forEach(doc => {
 
-  if (file.columns.length > 0) {
-    context += `Columns:\n`;
-    file.columns.forEach(col => {
-      context += `- ${col.name}: ${col.description}\n`;
-    });
+  context += `FILE: ${doc.name}\n`;
+
+  const chunkSize = 2000;
+  const maxChunks = 3;
+
+  for (let i = 0; i < maxChunks; i++) {
+
+    const start = i * chunkSize;
+    const end = start + chunkSize;
+
+    if (start >= doc.content.length) break;
+
+    context += doc.content.substring(start, end);
+    context += "\n\n";
   }
 
-  context += `\n`;
+  context += "\n-----------------------\n\n";
 });
 
 const groq = new Groq({
