@@ -1,6 +1,5 @@
 import Groq from "groq-sdk";
 import { ChartSpec } from "../types";
-import { findRelevantDocs } from "../../lib/vectorSearch";
 
 // ==================== MODEL CONFIGURATION ====================
 const PRIMARY_MODEL = "llama-3.3-70b-versatile";
@@ -788,16 +787,21 @@ export async function generateContent(
     }
   }
   
-// ---------------- VECTOR SEARCH ----------------
+// Build context from analyzed files
+let context = `DATA FROM USER FILES:\n\n`;
 
-// Find the most relevant documents for the question
-const relevantDocs = findRelevantDocs(prompt, knowledgeBase, 5);
+kb.files.forEach(file => {
+  context += `File: ${file.fileName}\n`;
+  context += `Summary: ${file.summary}\n`;
 
-let context = `RELEVANT DOCUMENT DATA:\n\n`;
+  if (file.columns.length > 0) {
+    context += `Columns:\n`;
+    file.columns.forEach(col => {
+      context += `- ${col.name}: ${col.description}\n`;
+    });
+  }
 
-relevantDocs.forEach((doc: any) => {
-  context += `File: ${doc.name}\n`;
-  context += `${doc.content.substring(0, 2000)}\n\n`;
+  context += `\n`;
 });
 
 const groq = new Groq({
