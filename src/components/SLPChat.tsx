@@ -65,7 +65,7 @@ export default function SLPChat() {
         ? { category: selectedCategory }
         : {};
       
-      const response = await hybridSearch.searchWithRetry(input, options);
+    const response = await hybridSearch.search(input);
       
       // Format assistant message with sources
       const assistantMessage: Message = {

@@ -1,12 +1,6 @@
-// src/services/hybridSearch.ts
-
 export interface HybridSearchResponse {
   answer: string
   sources: any[]
-}
-
-interface SearchOptions {
-  category?: string
 }
 
 export default class HybridSearchService {
@@ -18,70 +12,46 @@ export default class HybridSearchService {
     this.apiKey = apiKey
   }
 
-  // Initialize Pagefind
   async initPagefind() {
     try {
 
-      this.pagefind = await import(/* @vite-ignore */ "/pagefind/pagefind.js")
+      this.pagefind = await import(
+        /* @vite-ignore */ "/pagefind/pagefind.js"
+      )
 
-      console.log("✅ Pagefind loaded")
+      console.log("Pagefind loaded")
 
     } catch (err) {
 
-      console.error("❌ Pagefind failed to load", err)
+      console.error("Failed loading Pagefind", err)
 
     }
   }
 
-  // Pagefind search
-  async searchDocuments(query: string, options?: SearchOptions) {
+  async searchDocuments(query: string) {
 
-    if (!this.pagefind) {
-      console.warn("Pagefind not ready")
-      return []
-    }
+    if (!this.pagefind) return []
 
     const search = await this.pagefind.search(query)
 
-    if (!search?.results) return []
+    const results = await Promise.all(
+      search.results.slice(0, 5).map((r: any) => r.data())
+    )
 
-    const results = []
-
-    for (const r of search.results.slice(0, 5)) {
-
-      const data = await r.data()
-
-      if (options?.category && options.category !== "ALL") {
-
-        if (data.meta?.category !== options.category) continue
-
-      }
-
-      results.push({
-        fileName: data.meta?.title || "Document",
-        category: data.meta?.category || "General",
-        excerpt: data.excerpt || "",
-        content: data.content || ""
-      })
-
-    }
-
-    return results
+    return results.map((r: any) => ({
+      title: r.meta?.title || "Document",
+      category: r.meta?.category || "General",
+      content: r.content,
+      excerpt: r.excerpt
+    }))
   }
 
-  // Ask Groq using document context
-  async askGroq(question: string, sources: any[]): Promise<string> {
+  async askGroq(question: string, docs: any[]) {
 
-    if (!this.apiKey) {
-      return "⚠️ Groq API key missing."
-    }
-
-    const context = sources
-      .map(s => s.content)
-      .join("\n\n")
+    const context = docs.map(d => d.content).join("\n\n")
 
     const prompt = `
-Answer the question using ONLY the provided documents.
+Use ONLY the provided SLP documents.
 
 Documents:
 ${context}
@@ -90,68 +60,39 @@ Question:
 ${question}
 `
 
-    try {
-
-      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    const response = await fetch(
+      "https://api.groq.com/openai/v1/chat/completions",
+      {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${this.apiKey}`
+          "Authorization": `Bearer ${this.apiKey}`,
+          "Content-Type": "application/json"
         },
         body: JSON.stringify({
           model: "llama3-70b-8192",
           messages: [
-            {
-              role: "user",
-              content: prompt
-            }
+            { role: "user", content: prompt }
           ],
           temperature: 0.2
         })
-      })
+      }
+    )
 
-      const data = await res.json()
+    const data = await response.json()
 
-      return data.choices?.[0]?.message?.content || "No response."
-
-    } catch (err) {
-
-      console.error("Groq error:", err)
-
-      return "⚠️ Failed to query Groq."
-
-    }
+    return data.choices?.[0]?.message?.content || "No answer."
   }
 
-  // Full hybrid search
-  async search(question: string, options?: SearchOptions): Promise<HybridSearchResponse> {
+  async search(query: string): Promise<HybridSearchResponse> {
 
-    const docs = await this.searchDocuments(question, options)
+    const docs = await this.searchDocuments(query)
 
-    const answer = await this.askGroq(question, docs)
+    const answer = await this.askGroq(query, docs)
 
     return {
       answer,
       sources: docs
     }
-
-  }
-
-  // Retry wrapper
-  async searchWithRetry(question: string, options?: SearchOptions) {
-
-    try {
-
-      return await this.search(question, options)
-
-    } catch {
-
-      console.warn("Retrying search...")
-
-      return await this.search(question, options)
-
-    }
-
   }
 
 }
