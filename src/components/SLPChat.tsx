@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import HybridSearchService, { HybridSearchResponse } from '../services/hybridSearch';
-import { File, Send, LoaderCircle, Download } from 'lucide-react';
+import HybridSearchService from '../services/hybridSearch';
+import { Send, LoaderCircle } from 'lucide-react';
+
+// Define the type for the service instance
+type HybridSearchInstance = InstanceType<typeof HybridSearchService>;
 
 interface Message {
   role: 'user' | 'assistant';
@@ -12,7 +15,7 @@ export default function SLPChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [hybridSearch, setHybridSearch] = useState<HybridSearchService | null>(null);
+  const [hybridSearch, setHybridSearch] = useState<HybridSearchInstance | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
@@ -21,17 +24,24 @@ export default function SLPChat() {
   
   // Initialize hybrid search
   useEffect(() => {
-    const apiKey = import.meta.env.VITE_GROQ_API_KEY;
-    if (!apiKey) {
-      console.error('Missing Groq API key');
-      return;
-    }
+    const initSearch = async () => {
+      const apiKey = import.meta.env.VITE_GROQ_API_KEY;
+      if (!apiKey) {
+        console.error('Missing Groq API key');
+        return;
+      }
+      
+      try {
+        const service = new HybridSearchService(apiKey);
+        await service.initPagefind();
+        setHybridSearch(service);
+        console.log('✅ Hybrid search ready');
+      } catch (error) {
+        console.error('Failed to initialize hybrid search:', error);
+      }
+    };
     
-    const service = new HybridSearchService(apiKey);
-    service.initPagefind().then(() => {
-      setHybridSearch(service);
-      console.log('✅ Hybrid search ready');
-    });
+    initSearch();
   }, []);
   
   // Auto-scroll to bottom
@@ -94,7 +104,7 @@ export default function SLPChat() {
             onChange={(e) => setSelectedCategory(e.target.value)}
             className="w-full p-2 border rounded-lg"
           >
-            {categories.map(cat => (
+            {categories.map((cat) => (
               <option key={cat} value={cat}>{cat}</option>
             ))}
           </select>
