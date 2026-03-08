@@ -5,8 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "tsx api/health.ts",
-    "build": "vite build",
-    "vercel-build": "vite build",
+    "build": "vite build && npm run prepare-docs && npm run pagefind",
+    "vercel-build": "vite build && npm run prepare-docs && npm run pagefind",
+    "prepare-docs": "node scripts/prepare-docs.js",
+    "pagefind": "pagefind --site dist --output-path dist/pagefind",
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit"
