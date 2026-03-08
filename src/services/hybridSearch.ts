@@ -13,79 +13,155 @@ export interface HybridSearchResponse {
   sources: SearchResult[];
 }
 
+// Mock data for fallback search when Pagefind isn't available
+const mockDocuments = [
+  {
+    fileName: "SLP Guidelines 2024.pdf",
+    category: "GUIDELINES",
+    content: "The Sustainable Livelihood Program (SLP) provides cash-for-work and livelihood assistance to poor, vulnerable, and marginalized households and communities. The program has two tracks: Employment Facilitation and Livelihood Development.",
+    url: "/documents/slp-guidelines-2024.pdf"
+  },
+  {
+    fileName: "Cash-for-Work Guidelines.docx",
+    category: "GUIDELINES",
+    content: "Cash-for-Work is a short-term intervention that provides temporary employment to beneficiaries. Participants receive payment for community projects lasting 10-30 days. Daily wage is based on regional minimum wage rates.",
+    url: "/documents/cash-for-work-guidelines.docx"
+  },
+  {
+    fileName: "Livelihood Assistance Form.xlsx",
+    category: "FORMS AND TEMPLATES",
+    content: "Livelihood Assistance Form requires: Name, Address, Contact Number, Type of Livelihood (Agriculture, Small Business, Services), Amount Requested, Supporting Documents, and Barangay Clearance.",
+    url: "/documents/livelihood-assistance-form.xlsx"
+  },
+  {
+    fileName: "SLPIS Quarterly Report Q1 2024.pdf",
+    category: "SLPIS",
+    content: "Q1 2024 Report: 1,245 beneficiaries served across 15 municipalities. Total cash-for-work payout: ₱4.2M. Livelihood projects funded: 45 small businesses, 23 agricultural projects.",
+    url: "/documents/slpis-q1-2024.pdf"
+  },
+  {
+    fileName: "DPT Monitoring Tool.xlsx",
+    category: "SLP DPT",
+    content: "DPT (Development Project Tracker) includes: Project Name, Proponent, Status (Pipeline/Ongoing/Completed), Budget Allocated, Date Started, Target Completion, Actual Completion, Remarks.",
+    url: "/documents/dpt-monitoring-tool.xlsx"
+  }
+];
+
 class HybridSearchService {
-  private groq: Groq;
+  private groq: Groq | null = null;
   private pagefind: any = null;
+  private useMockData = true; // Set to false when Pagefind is properly configured
 
   constructor(apiKey: string) {
-    this.groq = new Groq({
-      apiKey,
-      dangerouslyAllowBrowser: true
-    });
-  }
-
-  // Initialize Pagefind
-  async initPagefind() {
-    if (this.pagefind) return this.pagefind;
-    
-    try {
-      // Load Pagefind from public directory
-      const module = await import('/pagefind/pagefind.js?url');
-      const response = await fetch(module.default);
-      const script = await response.text();
-      
-      // Create and execute script
-      const blob = new Blob([script], { type: 'application/javascript' });
-      const url = URL.createObjectURL(blob);
-      
-      await import(url);
-      this.pagefind = await (window as any).pagefind;
-      
-      URL.revokeObjectURL(url);
-      return this.pagefind;
-    } catch (error) {
-      console.error('Failed to load Pagefind:', error);
-      return null;
+    if (apiKey && apiKey.trim() !== '') {
+      try {
+        this.groq = new Groq({
+          apiKey,
+          dangerouslyAllowBrowser: true
+        });
+      } catch (error) {
+        console.warn('Failed to initialize Groq:', error);
+        this.groq = null;
+      }
+    } else {
+      console.warn('No Groq API key provided');
+      this.groq = null;
     }
   }
 
-  // Hybrid search: Pagefind + Groq
+  // Simple text-based search (fallback when Pagefind isn't available)
+  private textSearch(query: string, category?: string): SearchResult[] {
+    const searchTerms = query.toLowerCase().split(/\s+/).filter(term => term.length > 2);
+    
+    let documents = [...mockDocuments];
+    
+    // Filter by category if specified
+    if (category) {
+      documents = documents.filter(doc => 
+        doc.category.toLowerCase() === category.toLowerCase()
+      );
+    }
+    
+    const results: SearchResult[] = [];
+    
+    documents.forEach(doc => {
+      let score = 0;
+      const content = doc.content.toLowerCase();
+      const fileName = doc.fileName.toLowerCase();
+      
+      searchTerms.forEach(term => {
+        // Count occurrences in content
+        const contentMatches = (content.match(new RegExp(term, 'g')) || []).length;
+        score += contentMatches;
+        
+        // Bonus for matches in filename
+        if (fileName.includes(term)) {
+          score += 5;
+        }
+      });
+      
+      if (score > 0) {
+        // Create an excerpt
+        const excerpt = this.generateExcerpt(doc.content, query, 150);
+        
+        results.push({
+          fileName: doc.fileName,
+          category: doc.category,
+          excerpt: excerpt,
+          url: doc.url,
+          score
+        });
+      }
+    });
+    
+    // Sort by score descending
+    return results.sort((a, b) => (b.score || 0) - (a.score || 0));
+  }
+
+  private generateExcerpt(content: string, query: string, maxLength: number): string {
+    const lowerContent = content.toLowerCase();
+    const lowerQuery = query.toLowerCase();
+    const queryIndex = lowerContent.indexOf(lowerQuery);
+    
+    if (queryIndex >= 0) {
+      const start = Math.max(0, queryIndex - 50);
+      const end = Math.min(content.length, queryIndex + query.length + 50);
+      let excerpt = content.substring(start, end);
+      
+      if (start > 0) excerpt = '...' + excerpt;
+      if (end < content.length) excerpt = excerpt + '...';
+      
+      return excerpt;
+    }
+    
+    // If query not found, return first part of content
+    return content.substring(0, maxLength) + (content.length > maxLength ? '...' : '');
+  }
+
+  // Initialize Pagefind (placeholder - will be implemented when Pagefind is properly set up)
+  async initPagefind() {
+    console.log('Pagefind initialization skipped - using fallback search');
+    return null;
+  }
+
+  // Hybrid search: text search + Groq
   async search(query: string, options?: {
     maxSources?: number;
     category?: string;
   }): Promise<HybridSearchResponse> {
     const maxSources = options?.maxSources || 5;
     
-    // Initialize Pagefind if needed
-    if (!this.pagefind) {
-      await this.initPagefind();
-    }
-    
     try {
-      // STEP 1: Pagefind retrieves relevant documents
-      console.log('🔍 Searching with Pagefind:', query);
+      // STEP 1: Get relevant documents (using text search as fallback)
+      console.log('🔍 Searching documents:', query);
       
-      let searchFilters = {};
-      if (options?.category) {
-        searchFilters = { category: options.category };
-      }
+      const sources = this.textSearch(query, options?.category).slice(0, maxSources);
       
-      const search = await this.pagefind.search(query, {
-        filters: searchFilters
-      });
-      
-      // Get top results
-      const topResults = search.results.slice(0, maxSources);
-      const sources: SearchResult[] = [];
-      
-      for (const result of topResults) {
-        const data = await result.data();
-        sources.push({
-          fileName: data.meta?.title || 'Unknown',
-          category: data.filters?.category || 'Uncategorized',
-          excerpt: data.excerpt,
-          url: data.url
-        });
+      if (sources.length === 0) {
+        return {
+          answer: "No relevant documents found for your query.",
+          sources: []
+        };
       }
       
       // STEP 2: Build context for Groq
@@ -96,16 +172,20 @@ FOLDER: ${source.category}
 EXCERPT: ${source.excerpt}
       `).join('\n---\n');
       
-      // STEP 3: Groq generates answer
-      console.log('🤖 Generating answer with Groq...');
+      // STEP 3: Try Groq for answer generation (if available)
+      let answer = '';
       
-      const completion = await this.groq.chat.completions.create({
-        model: "llama-3.3-70b-versatile",
-        messages: [
-          {
-            role: "system",
-            content: `You are an SLP (Sustainable Livelihood Program) document assistant.
-            
+      if (this.groq) {
+        try {
+          console.log('🤖 Generating answer with Groq...');
+          
+          const completion = await this.groq.chat.completions.create({
+            model: "llama-3.3-70b-versatile",
+            messages: [
+              {
+                role: "system",
+                content: `You are an SLP (Sustainable Livelihood Program) document assistant.
+                
 RULES:
 - Answer ONLY using the provided document excerpts
 - If multiple documents are relevant, mention ALL of them
@@ -113,50 +193,49 @@ RULES:
 - Be concise but complete
 - If the answer isn't in the excerpts, say "I cannot find this information"
 - Always cite which document/file the information comes from`
-          },
-          {
-            role: "user",
-            content: `QUESTION: ${query}
+              },
+              {
+                role: "user",
+                content: `QUESTION: ${query}
 
 RELEVANT DOCUMENT EXCERPTS:
 ${context}
 
 Based ONLY on these excerpts, answer the question. Include specific details and cite sources:`
-          }
-        ],
-        temperature: 0.1,
-        max_tokens: 600
-      });
-      
-      const answer = completion.choices[0]?.message?.content || 'No answer generated.';
+              }
+            ],
+            temperature: 0.1,
+            max_tokens: 600
+          });
+          
+          answer = completion.choices[0]?.message?.content || '';
+        } catch (groqError: any) {
+          console.error('Groq API error:', groqError);
+          
+          // Fallback answer
+          answer = `I found ${sources.length} relevant document(s) but couldn't generate an AI answer. Here are the documents I found:\n\n`;
+          sources.forEach((source, i) => {
+            answer += `${i + 1}. **${source.fileName}** (${source.category})\n   ${source.excerpt}\n\n`;
+          });
+        }
+      } else {
+        // No Groq API key, just show the sources
+        answer = `Here are the relevant documents I found:\n\n`;
+        sources.forEach((source, i) => {
+          answer += `${i + 1}. **${source.fileName}** (${source.category})\n   ${source.excerpt}\n\n`;
+        });
+      }
       
       return { answer, sources };
       
     } catch (error) {
       console.error('Hybrid search error:', error);
       
-      // Fallback: Return just sources if Groq fails
-      if (this.pagefind) {
-        const search = await this.pagefind.search(query);
-        const sources: SearchResult[] = [];
-        
-        for (const result of search.results.slice(0, maxSources)) {
-          const data = await result.data();
-          sources.push({
-            fileName: data.meta?.title || 'Unknown',
-            category: data.filters?.category || 'Uncategorized',
-            excerpt: data.excerpt,
-            url: data.url
-          });
-        }
-        
-        return {
-          answer: "⚠️ AI temporarily unavailable. Here are the relevant documents:",
-          sources
-        };
-      }
-      
-      throw error;
+      // Ultimate fallback
+      return {
+        answer: "I encountered an error while searching. Please try again with a different query.",
+        sources: []
+      };
     }
   }
 
@@ -167,16 +246,56 @@ Based ONLY on these excerpts, answer the question. Include specific details and 
         return await this.search(query, options);
       } catch (error: any) {
         // Check if it's a rate limit error (429)
-        if (error.status === 429 || error.message?.includes('rate_limit')) {
-          const waitTime = Math.pow(2, i) * 1000; // Exponential backoff
-          console.log(`⏳ Rate limited. Waiting ${waitTime}ms before retry ${i + 1}/${maxRetries}`);
-          await new Promise(resolve => setTimeout(resolve, waitTime));
-          continue;
+        if (error?.status === 429 || error?.message?.includes('rate_limit')) {
+          if (i < maxRetries - 1) {
+            const waitTime = Math.pow(2, i) * 1000; // Exponential backoff
+            console.log(`⏳ Rate limited. Waiting ${waitTime}ms before retry ${i + 1}/${maxRetries}`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+            continue;
+          }
         }
-        throw error;
+        
+        // If it's the last retry or not a rate limit error, return fallback
+        return {
+          answer: `Search completed with limited results. ${error?.message || 'Unknown error'}`,
+          sources: this.textSearch(query, options?.category).slice(0, options?.maxSources || 5)
+        };
       }
     }
-    throw new Error('Max retries exceeded for Groq API');
+    
+    return {
+      answer: "Unable to complete search after multiple attempts.",
+      sources: []
+    };
+  }
+
+  // Method to add more mock documents (useful for testing)
+  addMockDocument(doc: typeof mockDocuments[0]) {
+    mockDocuments.push(doc);
+  }
+
+  // Method to clear mock documents
+  clearMockDocuments() {
+    mockDocuments.length = 0;
+  }
+
+  // Method to reset to default mock documents
+  resetMockDocuments() {
+    mockDocuments.length = 0;
+    mockDocuments.push(...[
+      {
+        fileName: "SLP Guidelines 2024.pdf",
+        category: "GUIDELINES",
+        content: "The Sustainable Livelihood Program (SLP) provides cash-for-work and livelihood assistance to poor, vulnerable, and marginalized households and communities. The program has two tracks: Employment Facilitation and Livelihood Development.",
+        url: "/documents/slp-guidelines-2024.pdf"
+      },
+      {
+        fileName: "Cash-for-Work Guidelines.docx",
+        category: "GUIDELINES",
+        content: "Cash-for-Work is a short-term intervention that provides temporary employment to beneficiaries. Participants receive payment for community projects lasting 10-30 days. Daily wage is based on regional minimum wage rates.",
+        url: "/documents/cash-for-work-guidelines.docx"
+      }
+    ]);
   }
 }
 
