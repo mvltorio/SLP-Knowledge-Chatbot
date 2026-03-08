@@ -5,6 +5,7 @@ import remarkGfm from 'remark-gfm';
 import { generateContent, KnowledgeDocument, analyzeImage } from './services/geminiService';
 import { Message } from './types';
 import Chart from './components/Chart';
+import SLPChat from './components/SLPChat';
 
 import * as pdfjsLib from 'pdfjs-dist';
 import mammoth from 'mammoth';
@@ -38,7 +39,7 @@ const CATEGORIES = [
   'OTHERS FILES'
 ];
 
-export default function App() {
+function App() {
   const [user, setUser] = useState<User | null>(null);
   const [view, setView] = useState<'login' | 'register' | 'chat' | 'admin'>('login');
   const [authEmail, setAuthEmail] = useState('');
@@ -160,21 +161,22 @@ export default function App() {
     const data = await res.json();
     setAdminUsers(data);
   };
-  useEffect(() => {
-  fetchAdminUsers();
-}, []);
 
-const approveUser = async (userId: number, role: string) => {
-  try {
-    const res = await fetch('/api/admin/update-role', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        userId,
-        role,
-        status: "approved"
-      })
-    });
+  useEffect(() => {
+    fetchAdminUsers();
+  }, []);
+
+  const approveUser = async (userId: number, role: string) => {
+    try {
+      const res = await fetch('/api/admin/update-role', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          role,
+          status: "approved"
+        })
+      });
       const data = await res.json();
       if (!data.success) {
         alert('Failed to approve user: ' + data.message);
@@ -230,28 +232,28 @@ const approveUser = async (userId: number, role: string) => {
   };
 
   const rejectUser = async (userId: number) => {
-  if (window.confirm('Are you sure you want to reject/delete this user?')) {
-    try {
-      const res = await fetch('/api/admin/delete-user', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId })
-      });
+    if (window.confirm('Are you sure you want to reject/delete this user?')) {
+      try {
+        const res = await fetch('/api/admin/delete-user', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId })
+        });
 
-      const data = await res.json();
+        const data = await res.json();
 
-      if (!data.success) {
-        alert('Failed to reject user: ' + data.message);
+        if (!data.success) {
+          alert('Failed to reject user: ' + data.message);
+        }
+
+        fetchAdminUsers();
+
+      } catch (e) {
+        console.error('Rejection error:', e);
+        alert('Connection error while rejecting user.');
       }
-
-      fetchAdminUsers();
-
-    } catch (e) {
-      console.error('Rejection error:', e);
-      alert('Connection error while rejecting user.');
     }
-  }
-};
+  };
 
   const fetchKnowledgeBase = async () => {
     const res = await fetch('/api/files');
@@ -259,28 +261,27 @@ const approveUser = async (userId: number, role: string) => {
     setKnowledgeBase(data);
   };
 
-const deleteFile = async (id: number) => {
+  const deleteFile = async (id: number) => {
+    const confirmDelete = window.confirm(
+      "Are you sure you want to delete this document?"
+    );
 
-  const confirmDelete = window.confirm(
-    "Are you sure you want to delete this document?"
-  );
+    if (!confirmDelete) return;
 
-  if (!confirmDelete) return;
+    const res = await fetch(`/api/files?id=${id}`, {
+      method: "DELETE"
+    });
 
-  const res = await fetch(`/api/files?id=${id}`, {
-    method: "DELETE"
-  });
+    const data = await res.json();
 
-  const data = await res.json();
+    if (!res.ok) {
+      alert("Delete failed");
+      console.error(data);
+      return;
+    }
 
-  if (!res.ok) {
-    alert("Delete failed");
-    console.error(data);
-    return;
-  }
-
-  fetchKnowledgeBase();
-};
+    fetchKnowledgeBase();
+  };
 
   const updateFile = async (e: FormEvent) => {
     e.preventDefault();
@@ -560,6 +561,7 @@ const deleteFile = async (id: number) => {
     }
   };
 
+  // Render based on view
   if (view === 'login' || view === 'register') {
     return (
       <div className="min-h-screen bg-emerald-50 flex items-center justify-center p-4">
@@ -785,515 +787,7 @@ const deleteFile = async (id: number) => {
   }
 
   // Chat view
-  return (
-    <div className="h-screen w-screen bg-emerald-50 flex antialiased overflow-hidden">
-      {/* Knowledge Panel */}
-      <div className="w-96 bg-white border-r border-emerald-100 flex flex-col shadow-2xl">
-        <div className="p-6 border-b border-emerald-50 bg-emerald-50/50">
-          <div className="flex flex-col items-center mb-6">
-            <div className="w-20 h-20 bg-emerald-600 rounded-3xl flex items-center justify-center shadow-lg mb-3 rotate-3 hover:rotate-0 transition-transform duration-300">
-              <Leaf className="w-10 h-10 text-white" />
-            </div>
-            <h1 className="text-xl font-bold text-emerald-900 text-center">SLP Knowledge Chatbot</h1>
-            <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mt-1">Sustainable Livelihood Program</p>
-          </div>
-
-          <div className="flex justify-between items-start mb-4">
-            <h2 className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Control Panel</h2>
-            <div className="flex gap-2">
-              {user?.role === 'admin' && (
-                <>
-                  <button onClick={() => setView('admin')} className="p-2 text-emerald-600 hover:bg-emerald-100 rounded-lg transition" title="Admin Panel">
-                    <Users className="w-5 h-5" />
-                  </button>
-                  <button
-                    onClick={handleFetchOAuthDebug}
-                    className="p-2 text-gray-400 hover:bg-emerald-100 rounded-lg transition"
-                    title="Debug Connection"
-                  >
-                    <LoaderCircle className="w-5 h-5" />
-                  </button>
-                </>
-              )}
-              <button onClick={() => {
-                localStorage.removeItem('slp_user');
-                setUser(null);
-                setView('login');
-              }}
-                className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition"
-                title="Logout"
-              >
-                <LogOut className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            {user?.role === 'admin' && (
-              <>
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-emerald-700 uppercase tracking-wider flex items-center justify-between">
-                    <span className="flex items-center gap-2"><Key className="w-3 h-3" /> Custom API Key</span>
-                    <div className="flex items-center gap-2">
-                      {keyStatus === 'validating' && <span className="text-blue-600 animate-pulse text-[10px]">Validating...</span>}
-                      {keyStatus === 'valid' && (
-                        <span className="text-emerald-600 text-[10px] flex items-center gap-1 font-mono">
-                          <CheckCircle className="w-3 h-3" /> Active: ...{customApiKey.slice(-4)}
-                        </span>
-                      )}
-                      {keyStatus === 'invalid' && <span className="text-red-500 text-[10px] flex items-center gap-1"><X className="w-3 h-3" /> Invalid Key</span>}
-                      {isKeySaved && !keyStatus && <span className="text-emerald-600 animate-pulse flex items-center gap-1 text-[10px]"><CheckCircle className="w-3 h-3" /> Saved!</span>}
-                    </div>
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="password"
-                      placeholder="Paste your key here..."
-                      className={`flex-1 px-3 py-2 bg-white border rounded-lg text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none transition 
-                    ${keyStatus === 'valid' ? 'border-emerald-500 bg-emerald-50/30' :
-                          keyStatus === 'invalid' ? 'border-red-300 bg-red-50/30' : 'border-emerald-200'}`}
-                      value={customApiKey}
-onChange={(e) => {
-  const key = e.target.value.trim();
-
-  setCustomApiKey(key);
-  localStorage.setItem("gemini_custom_key", key);
-
-  if (key.length > 20) {
-    setKeyStatus("valid");
-  } else {
-    setKeyStatus("idle");
-  }
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div className="p-3 bg-emerald-50/50 rounded-xl border border-emerald-100/50 space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="text-[10px] font-bold text-emerald-700 uppercase">Quota Monitor</span>
-                    <span className={`text-[10px] font-bold ${estimatedTokens > 800000 ? 'text-red-600' : 'text-emerald-600'}`}>
-                      {estimatedTokens.toLocaleString()} / 1M TPM
-                    </span>
-                  </div>
-                  <div className="w-full h-1.5 bg-emerald-100 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full transition-all duration-500 ${estimatedTokens > 800000 ? 'bg-red-500' : 'bg-emerald-500'}`}
-                      style={{ width: `${Math.min(100, (estimatedTokens / 1000000) * 100)}%` }}
-                    />
-                  </div>
-                  <p className="text-[9px] text-emerald-600 leading-tight">
-                    Free tier limit: 15 RPM / 1M TPM. If you hit 100%, clear the chat or wait 60s.
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Target Folder</label>
-                  <div className="grid grid-cols-1 gap-1">
-                    {CATEGORIES.map(cat => (
-                      <button
-                        key={cat}
-                        onClick={() => setSelectedCategory(cat)}
-                        onDragOver={(e) => {
-                          e.preventDefault();
-                          (e.currentTarget as HTMLElement).classList.add('bg-emerald-100');
-                        }}
-                        onDragLeave={(e) => {
-                          (e.currentTarget as HTMLElement).classList.remove('bg-emerald-100');
-                        }}
-                        onDrop={async (e) => {
-                          e.preventDefault();
-                          (e.currentTarget as HTMLElement).classList.remove('bg-emerald-100');
-                          setSelectedCategory(cat);
-                          handleFileChange(e.dataTransfer.files, cat);
-                        }}
-                        className={`text-left px-3 py-2 rounded-lg text-sm transition flex items-center justify-between ${selectedCategory === cat ? 'bg-emerald-600 text-white shadow-md' : 'text-gray-600 hover:bg-emerald-50'}`}
-                      >
-                        {cat}
-                        {selectedCategory === cat && <ChevronRight className="w-4 h-4" />}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </>
-            )}
-            {user?.role === 'user' && (
-              <div className="p-6 bg-emerald-50 rounded-2xl border border-emerald-100">
-                <p className="text-sm text-emerald-800 font-medium">Welcome to SLP Chatbot!</p>
-                <p className="text-xs text-emerald-600 mt-2">You have access to the chat and the shared knowledge base. Ask anything about the guidelines or data.</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="flex-1 p-6 overflow-y-auto">
-          {user?.role === 'admin' ? (
-            <>
-              <div
-                className={`relative group h-40 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center transition-all ${isDragging ? 'border-emerald-500 bg-emerald-50' : 'border-emerald-200 hover:border-emerald-400 bg-emerald-50/30'}`}
-                onDragEnter={() => setIsDragging(true)}
-                onDragLeave={() => setIsDragging(false)}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => { e.preventDefault(); setIsDragging(false); handleFileChange(e.dataTransfer.files); }}
-              >
-                <input
-  type="file"
-  multiple
-  className="absolute inset-0 opacity-0 cursor-pointer"
-  onChange={(e) => handleFileChange(e.target.files)}
-/>
-                <Paperclip className="w-8 h-8 text-emerald-400 mb-2 group-hover:scale-110 transition-transform" />
-                <p className="text-emerald-700 text-xs font-medium text-center px-4">Drop files into <span className="font-bold">{selectedCategory}</span></p>
-              </div>
-
-              {knowledgeBase.length > 0 && (
-                <div className="mt-8">
-                  <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Knowledge Base</h2>
-                  <div className="space-y-2">
-                    {knowledgeBase
-                      .filter((file: any) => file.category === selectedCategory)
-                      .map((file: any, idx) => (
-                      <div key={idx} className="flex flex-col bg-emerald-50 p-3 rounded-xl border border-emerald-100">
-                        <div className="flex items-center justify-between min-w-0">
-                          <div className="flex items-center min-w-0">
-                            <File className="w-4 h-4 text-emerald-500 mr-3 flex-shrink-0" />
-                            <div className="truncate">
-                              <p className="text-sm font-medium text-emerald-900 truncate">{file.name}</p>
-                              <p className="text-[10px] text-emerald-600 uppercase">{file.category}</p>
-                            </div>
-                          </div>
-                          <div className="flex gap-1">
-                            <button onClick={() => setPreviewFile(file)} className="p-1 text-emerald-600 hover:bg-emerald-100 rounded transition" title="Preview Content">
-                              <ChevronRight className="w-3 h-3" />
-                            </button>
-                            <button onClick={() => setEditingFile(file)} className="p-1 text-emerald-600 hover:bg-emerald-100 rounded transition" title="Edit Document">
-                              <Edit3 className="w-3 h-3" />
-                            </button>
-                            <button onClick={() => deleteFile(file.id)} className="p-1 text-emerald-300 hover:text-red-500 transition" title="Delete Document">
-                              <X className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="h-full flex flex-col items-center justify-center text-center p-8">
-              <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mb-4">
-                <FolderOpen className="w-8 h-8 text-emerald-600" />
-              </div>
-              <h3 className="text-lg font-bold text-emerald-900">Shared Knowledge Base</h3>
-              <p className="text-sm text-emerald-600 mt-2 max-w-xs">
-                The administrator has uploaded {knowledgeBase.length} documents to help answer your questions.
-              </p>
-            </div>
-          )}
-        </div>
-
-        <div className="p-4 border-t border-emerald-50 bg-emerald-50/30">
-          <div className="flex flex-col items-center gap-1">
-            <p className="text-[10px] text-emerald-700 font-bold tracking-widest uppercase">© 2026 MVLTORIO</p>
-          </div>
-        </div>
-
-        {/* Edit Modal */}
-        {editingFile && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl">
-              <h2 className="text-xl font-bold text-gray-900 mb-6">Edit Document</h2>
-              <form onSubmit={updateFile} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Document Name</label>
-                  <input
-                    type="text"
-                    className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                    value={editingFile.name}
-                    onChange={(e) => setEditingFile({ ...editingFile, name: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-                  <select
-                    className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                    value={editingFile.category}
-                    onChange={(e) => setEditingFile({ ...editingFile, category: e.target.value })}
-                  >
-                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                </div>
-                <div className="flex gap-4 pt-4">
-                  <button type="button" onClick={() => setEditingFile(null)} className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl font-semibold hover:bg-gray-200 transition">
-                    Cancel
-                  </button>
-                  <button type="submit" className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-semibold hover:bg-emerald-700 transition">
-                    Save Changes
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* Preview Modal */}
-        {previewFile && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-3xl p-8 max-w-2xl w-full shadow-2xl flex flex-col max-h-[80vh]">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-bold text-gray-900">Preview: {previewFile.name}</h2>
-                <button onClick={() => setPreviewFile(null)} className="p-2 hover:bg-gray-100 rounded-full transition">
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
-              <div className="flex-1 overflow-y-auto bg-gray-50 p-6 rounded-2xl border border-gray-200 font-mono text-sm whitespace-pre-wrap">
-                {previewFile.content || '[No content extracted]'}
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className="mt-auto p-6 border-t border-emerald-100 space-y-3">
-          <button
-            onClick={handleClearChat}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-white text-emerald-600 border border-emerald-200 rounded-xl text-xs font-bold hover:bg-emerald-50 transition shadow-sm"
-          >
-            <X className="w-4 h-4" /> Clear Chat History
-          </button>
-        </div>
-      </div>
-
-      {/* Chat Panel */}
-      <div className="flex-1 flex flex-col bg-emerald-50/30 relative">
-        {quotaError && !customApiKey && (
-          <div className="absolute top-0 left-0 right-0 z-50 bg-red-600 text-white p-4 flex items-center justify-between shadow-lg animate-in slide-in-from-top duration-300">
-            <div className="flex items-center gap-3">
-              <Key className="w-6 h-6 animate-bounce" />
-              <div>
-                <p className="font-bold text-sm">AI Quota Exhausted!</p>
-                <p className="text-xs opacity-90">Please paste your own FREE API key in the sidebar to continue.</p>
-              </div>
-            </div>
-            <a
-              href="https://aistudio.google.com/app/apikey"
-              target="_blank"
-              className="px-4 py-2 bg-white text-red-600 rounded-xl text-xs font-bold hover:bg-red-50 transition shadow-sm"
-            >
-              Get Free Key
-            </a>
-          </div>
-        )}
-        <div className="flex-1 p-8 overflow-y-auto">
-          <div className="max-w-3xl mx-auto space-y-8">
-            {messages.length === 0 && (
-              <div className="text-center pt-20">
-                <div className="w-20 h-20 bg-emerald-100 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-inner">
-                  <FolderOpen className="w-10 h-10 text-emerald-600" />
-                </div>
-                <h2 className="text-3xl font-bold text-emerald-900">Hello, {user?.email.split('@')[0]}</h2>
-                <p className="text-emerald-600 mt-2 text-lg">I'm ready to analyze your knowledge base.</p>
-              </div>
-            )}
-
-            {messages.map((msg, idx) => (
-              <div key={idx} className={`flex flex-col gap-2 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                <div className={`flex gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                  {msg.role === 'model' && (
-                    <div className="w-10 h-10 rounded-2xl bg-emerald-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-emerald-200">
-                      <FolderOpen className="w-5 h-5 text-white" />
-                    </div>
-                  )}
-                  <div className={`p-5 rounded-3xl max-w-xl shadow-sm border ${msg.role === 'user' ? 'bg-emerald-600 text-white border-emerald-500 rounded-br-none' : 'bg-white text-gray-800 border-emerald-100 rounded-bl-none'}`}>
-                    <div className={`prose prose-sm max-w-none ${msg.role === 'user' ? 'prose-invert' : 'prose-emerald'}`}>
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.text}</ReactMarkdown>
-                    </div>
-                    {msg.chart && <Chart spec={msg.chart} />}
-                    {msg.fileDownload && (
-                      <div className="mt-4 p-3 bg-emerald-50 rounded-xl border border-emerald-100 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <File className="w-5 h-5 text-emerald-600" />
-                          <span className="text-sm font-medium text-emerald-900">{msg.fileDownload.name}</span>
-                        </div>
-                        <a
-                          href={`/api/files/download/${msg.fileDownload.id}`}
-                          download={msg.fileDownload.name}
-                          className="p-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition shadow-sm"
-                          title="Download File"
-                        >
-                          <Download className="w-4 h-4" />
-                        </a>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                {msg.role === 'model' && (msg.text.includes('Error') || msg.text.includes('Quota')) && (
-                  <button
-                    onClick={handleRetry}
-                    disabled={retryCooldown > 0}
-                    className={`ml-14 text-xs font-bold flex items-center gap-1 ${retryCooldown > 0 ? 'text-gray-400 cursor-not-allowed' : 'text-emerald-600 hover:underline'}`}
-                  >
-                    <Send className="w-3 h-3" /> {retryCooldown > 0 ? `Wait ${retryCooldown}s to retry` : 'Click here to retry after adding your key'}
-                  </button>
-                )}
-              </div>
-            ))}
-
-            {isLoading && (
-              <div className="flex gap-4">
-                <div className="w-10 h-10 rounded-2xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
-                  <LoaderCircle className="w-5 h-5 animate-spin text-emerald-600" />
-                </div>
-                <div className="p-5 rounded-3xl bg-white border border-emerald-100 shadow-sm">
-                  <div className="flex gap-1">
-                    <div className="w-2 h-2 bg-emerald-200 rounded-full animate-bounce" />
-                    <div className="w-2 h-2 bg-emerald-300 rounded-full animate-bounce [animation-delay:0.2s]" />
-                    <div className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce [animation-delay:0.4s]" />
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="p-8 bg-white border-t border-emerald-100">
-          <div className="max-w-3xl mx-auto">
-            <form onSubmit={handleSubmit} className="relative group">
-              <input
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask about your knowledge base..."
-                className="w-full p-4 pr-24 bg-emerald-50/50 border border-emerald-100 rounded-2xl focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 focus:outline-none transition-all placeholder:text-emerald-300"
-                disabled={isLoading}
-              />
-              <div className="absolute right-2 top-2 flex gap-2">
-                <label className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl cursor-pointer transition-all">
-                  <input
-                    type="file"
-                    className="hidden"
-                    onChange={async (e) => {
-                      const files = e.target.files;
-                      if (!files || files.length === 0) return;
-
-                      setIsLoading(true);
-                      try {
-                        const file = files[0];
-                        let content = '';
-                        if (file.type === 'application/pdf') content = await extractTextFromPDF(file);
-                        else if (file.type.includes('word')) content = await extractTextFromDocx(file);
-                        else if (file.type.includes('excel') || file.type.includes('spreadsheet')) content = await extractTextFromExcel(file);
-                        else if (file.type.startsWith('image/')) content = await analyzeImage(file, customApiKey);
-                        else {
-                          const reader = new FileReader();
-                          content = await new Promise((resolve) => {
-                            reader.onload = () => resolve(reader.result as string);
-                            reader.readAsText(file);
-                          });
-                        }
-
-                        const expiresAt = new Date();
-                        expiresAt.setHours(expiresAt.getHours() + 24);
-
-                        await fetch('/api/files/upload', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            name: file.name,
-                            category: 'CHAT_UPLOAD',
-                            content,
-                            type: file.type,
-                            expires_at: expiresAt.toISOString(),
-                            apiKey: customApiKey
-                          })
-                        });
-
-                        setMessages(prev => [...prev, {
-                          role: 'user',
-                          text: `Uploaded file: ${file.name} (Available for 24h)`
-                        }]);
-
-                        fetchKnowledgeBase();
-                      } catch (err) {
-                        console.error('Chat upload error:', err);
-                        alert('Failed to upload file to chat.');
-                      } finally {
-                        setIsLoading(false);
-                      }
-                    }}
-                  />
-                  <Paperclip className="w-6 h-6" />
-                </label>
-                <button
-                  type="submit"
-                  className="p-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 disabled:bg-emerald-200 transition-all shadow-lg shadow-emerald-100"
-                  disabled={isLoading || !input.trim()}
-                >
-                  <Send className="w-6 h-6" />
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-
-        {/* OAuth Debug Modal */}
-        {showOAuthDebug && oAuthDebugInfo && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-3xl p-8 max-w-lg w-full shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-bold text-gray-900">Google OAuth Debug</h2>
-                <button onClick={() => setShowOAuthDebug(false)} className="p-2 hover:bg-gray-100 rounded-full transition">
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
-              <div className="flex-1 overflow-y-auto space-y-4">
-                <div className="p-4 bg-red-50 border border-red-100 rounded-xl">
-                  <p className="text-sm text-red-700 font-bold mb-2">MANDATORY ACTION:</p>
-                  <p className="text-xs text-red-600 leading-relaxed">
-                    You MUST copy the URI below and add it to your <strong>Google Cloud Console</strong> under
-                    "Authorized redirect URIs" for your OAuth 2.0 Client ID.
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-gray-400 uppercase">Authorized Redirect URI to Add:</label>
-                  <div className="p-3 bg-gray-100 rounded-xl font-mono text-xs break-all border border-gray-200 select-all">
-                    {oAuthDebugInfo.calculatedRedirectUri}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-gray-400 uppercase">Client ID Status:</label>
-                    <p className="text-sm font-medium">{oAuthDebugInfo.clientId}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-gray-400 uppercase">Client Secret Status:</label>
-                    <p className="text-sm font-medium">{oAuthDebugInfo.clientSecret}</p>
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-gray-400 uppercase">Current Origin:</label>
-                  <p className="text-xs font-mono">{oAuthDebugInfo.origin_passed}</p>
-                </div>
-
-                <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl">
-                  <p className="text-xs text-blue-700">
-                    <strong>Tip:</strong> If you are testing in the AI Studio preview, the URI will change between "Dev" and "Shared" views. You should add BOTH URIs to your Google Console.
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowOAuthDebug(false)}
-                className="mt-6 w-full py-3 bg-gray-900 text-white rounded-xl font-bold hover:bg-gray-800 transition"
-              >
-                Got it
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+  return <SLPChat />;
 }
+
+export default App;
