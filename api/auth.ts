@@ -19,7 +19,12 @@ export default async function handler(req: any, res: any) {
     });
   }
 
-  const { email, password } = req.body;
+  const body =
+  typeof req.body === "string"
+    ? JSON.parse(req.body)
+    : req.body || {};
+
+const { email, password } = body;
 
   // Validate required fields
   if (!email || !password) {
