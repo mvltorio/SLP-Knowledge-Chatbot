@@ -1,23 +1,18 @@
-<<<<<<< HEAD
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
 
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 @layer base {
   body {
     @apply bg-emerald-50 text-gray-800 antialiased;
-    font-family: 'Inter', sans-serif;
+    font-family: "Inter", sans-serif;
   }
 }
 
-@theme {
-  --color-primary: #10b981; /* emerald-500 */
-  --color-primary-hover: #059669; /* emerald-600 */
-  --color-primary-light: #ecfdf5; /* emerald-50 */
+:root {
+  --color-primary: #10b981;
+  --color-primary-hover: #059669;
+  --color-primary-light: #ecfdf5;
 }
-
-=======
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
->>>>>>> eaffcb4e7892a08afee9778f4ea3ff374522b3b6
