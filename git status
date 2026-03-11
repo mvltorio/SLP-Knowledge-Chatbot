@@ -1,0 +1,71 @@
+[33m15cac91[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m fix ESM import for extractText
+[33m4e6d4c0[m add csv extractor
+[33m90c8033[m increase sync timeout
+[33me2d583a[m fix extractor and sync imports
+[33mc9287d3[m fix extractor path
+[33me73d7d1[m move extractors outside api
+[33m4b78d1f[m move extractors to lib folder
+[33md60f185[m move extractors into api and fix imports
+[33md6126b4[m fix extractor path
+[33m409ad44[m fix extractor import path
+[33mf000b19[m Fix extractor exports
+[33m7104658[m Fix admin API
+[33m93aecc9[m Fix pdf extractor and document extractors
+[33ma5218f2[m Add extractor implementations
+[33m18c89e3[m Fix extractor import path
+[33mb76e929[m Fix search API typing
+[33mfd61283[m Install vercel node types
+[33m7423ba6[m Install vercel node types
+[33m5c27b31[m Improve RAG retrieval limit to 6 documents
+[33m67a8f4b[m Implement Google Drive real sync
+[33m67bc396[m Implement real Google Drive sync
+[33mdc02dbe[m Fix sync endpoint type error
+[33m93cdcb4[m Fix sync fetch typo
+[33mf17c961[m Fix sync button properly
+[33mb6cf377[m Add drive upload sync
+[33m54f0f1f[m Replace OAuth with direct drive folder link
+[33m7184f86[m Fix approve and reject to use users table
+[33m68791f3[m Fix admin users API to use users table
+[33ma288a1e[m Fix admin auto redirect to dashboard
+[33m7131185[m fix logout session
+[33m6043495[m Fix register flow
+[33m4ef975d[m add admin approval check in login
+[33m1727794[m fix register API path
+[33m0d0e63d[m final local version
+[33mc7d889e[m Move register into auth folder
+[33m2711323[m Move register into auth folder
+[33mdd4ad71[m Remove vercel.json runtime config
+[33mb95ba8c[m Fix Vercel runtime format
+[33m74ac16d[m Enable API functions on Vercel
+[33m865489e[m Fix users endpoint to /api/admin/users
+[33m6310904[m Move users.ts to admin folder
+[33mf07fb2f[m Fix login to use metadata role
+[33m6faa739[m Implement full Supabase admin system
+[33m83592fc[m fix admin login and session restore
+[33m107baf8[m Delete vercel.json
+[33m8305feb[m force clean deploy
+[33m049decc[m force redeploy users role fix
+[33m76d3473[m Fix admin role detection properly
+[33m3c6e5a0[m Fix admin role detection
+[33m45a1a20[m Fix API routing for Vercel
+[33mab5198f[m Remove vercel rewrites
+[33m639fff1[m Final rename to users.ts
+[33m4219fc0[m Temporary rename users API
+[33m763597f[m Add users and register APIs
+[33m3c38fad[m Add real users API
+[33m46ff199[m Fix login user undefined error
+[33md1c1deb[m Add admin role to login response
+[33m8e44743[m Fix files API to return array
+[33mb170366[m Disable drive status check
+[33m468ec54[m Fix DB health route
+[33m0c46877[m Fix cleanup route path
+[33me9e0b16[m Fix cleanup method to POST
+[33m4cc6378[m Fix vercel.json rewrite issue
+[33md631b16[m Split API routes properly for Vercel
+[33mfb9e67a[m Fix login route to match frontend
+[33m6a2b3b2[m Add login route
+[33mee43ee2[m Test Supabase connection
+[33me3f826f[m Fix api handler simple version
+[33m43d0d61[m Fix api handler and remove server import
+[33mddee413[m Remove server.ts for Vercel compatibility
+[33m85e51bd[m Project setup from local

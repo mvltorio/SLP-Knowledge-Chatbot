@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 @import "tailwindcss";
@@ -15,3 +16,8 @@
   --color-primary-light: #ecfdf5; /* emerald-50 */
 }
 
+=======
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+>>>>>>> eaffcb4e7892a08afee9778f4ea3ff374522b3b6

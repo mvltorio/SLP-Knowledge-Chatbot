@@ -1,10 +1,20 @@
 import { useState, FormEvent, ChangeEvent, useEffect } from 'react';
+<<<<<<< HEAD
 import { Paperclip, Send, File, X, LoaderCircle, LogOut, Users, CheckCircle, FolderOpen, ChevronRight, Edit3, Download, Key, RefreshCw, Leaf, Plus, UserPlus, HelpCircle, Trash2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { generateContent, KnowledgeDocument } from './services/groqService';
 import { Message } from './types';
 import Chart from './components/Chart';
+=======
+import { Paperclip, Send, File, X, LoaderCircle, LogOut, Users, CheckCircle, FolderOpen, ChevronRight, Edit3, Download, Key, Leaf, Plus, UserPlus, HelpCircle } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { generateContent, KnowledgeDocument, analyzeImage } from './services/geminiService';
+import { Message } from './types';
+import Chart from './components/Chart';
+import SLPChat from './components/SLPChat';
+>>>>>>> eaffcb4e7892a08afee9778f4ea3ff374522b3b6
 
 import * as pdfjsLib from 'pdfjs-dist';
 import mammoth from 'mammoth';
@@ -38,13 +48,21 @@ const CATEGORIES = [
   'OTHERS FILES'
 ];
 
+<<<<<<< HEAD
 export default function App() {
+=======
+function App() {
+>>>>>>> eaffcb4e7892a08afee9778f4ea3ff374522b3b6
   const [user, setUser] = useState<User | null>(null);
   const [view, setView] = useState<'login' | 'register' | 'chat' | 'admin'>('login');
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [authMessage, setAuthMessage] = useState('');
+<<<<<<< HEAD
   
+=======
+
+>>>>>>> eaffcb4e7892a08afee9778f4ea3ff374522b3b6
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [knowledgeBase, setKnowledgeBase] = useState<KnowledgeDocument[]>([]);
@@ -53,6 +71,7 @@ export default function App() {
   const [isDragging, setIsDragging] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [adminUsers, setAdminUsers] = useState<any[]>([]);
+<<<<<<< HEAD
   const [isCheckingDb, setIsCheckingDb] = useState(false);
 
   const checkDbHealth = async () => {
@@ -90,22 +109,79 @@ export default function App() {
   };
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [dbStatus, setDbStatus] = useState<{status: 'ok' | 'error' | 'loading', message?: string, hint?: string, details?: any}>({status: 'loading'});
+=======
+  const [previewFile, setPreviewFile] = useState<any>(null);
+  const [isDriveConnected, setIsDriveConnected] = useState(false);
+  const [showOAuthDebug, setShowOAuthDebug] = useState(false);
+  const [oAuthDebugInfo, setOAuthDebugInfo] = useState<any>(null);
+  const [isValidatingKey, setIsValidatingKey] = useState(false);
+  const [keyValidationError, setKeyValidationError] = useState<string | null>(null);
+  const [dbStatus, setDbStatus] = useState<{ status: 'ok' | 'error' | 'loading', message?: string, hint?: string }>({ status: 'loading' });
+  const [customApiKey, setCustomApiKey] = useState(() => localStorage.getItem('gemini_custom_key') || '');
+  const [isKeySaved, setIsKeySaved] = useState(false);
+  const [keyStatus, setKeyStatus] = useState<'idle' | 'validating' | 'valid' | 'invalid'>(() =>
+    (localStorage.getItem('gemini_key_status') as any) || 'idle'
+  );
+  const [quotaError, setQuotaError] = useState(false);
+  const [retryCooldown, setRetryCooldown] = useState(0);
+  const [estimatedTokens, setEstimatedTokens] = useState(0);
+>>>>>>> eaffcb4e7892a08afee9778f4ea3ff374522b3b6
   const [isAddingUser, setIsAddingUser] = useState(false);
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserPassword, setNewUserPassword] = useState('');
   const [newUserRole, setNewUserRole] = useState<'user' | 'admin'>('user');
   const [editingAdminUser, setEditingAdminUser] = useState<any>(null);
 
+<<<<<<< HEAD
+=======
+  // Auto restore login session
+  useEffect(() => {
+    const savedUser = localStorage.getItem('slp_user');
+    if (savedUser) {
+      try {
+        const parsed = JSON.parse(savedUser);
+        setUser(parsed);
+        setView('chat');
+      } catch {
+        localStorage.removeItem('slp_user');
+      }
+    }
+  }, []);
+
+  // Cooldown timer effect
+  useEffect(() => {
+    if (retryCooldown > 0) {
+      const timer = setTimeout(() => setRetryCooldown(prev => prev - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [retryCooldown]);
+
+  // Estimate tokens when knowledge base or messages change
+  useEffect(() => {
+    const kbText = knowledgeBase.map(doc => doc.content).join(' ');
+    const msgText = messages.map(msg => msg.text).join(' ');
+    const totalChars = kbText.length + msgText.length;
+    setEstimatedTokens(Math.ceil(totalChars / 4));
+  }, [knowledgeBase, messages]);
+
+>>>>>>> eaffcb4e7892a08afee9778f4ea3ff374522b3b6
   // Auth Handlers
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
     setAuthMessage('');
+<<<<<<< HEAD
     try {
       const res = await fetch('/api/auth/login', {
+=======
+
+    try {
+      const res = await fetch('/api/auth', {
+>>>>>>> eaffcb4e7892a08afee9778f4ea3ff374522b3b6
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: authEmail, password: authPassword })
       });
+<<<<<<< HEAD
       const data = await res.json();
       if (data.success) {
         setUser(data.user);
@@ -114,19 +190,44 @@ export default function App() {
         setAuthMessage(data.message);
       }
     } catch (e) {
+=======
+
+      const data = await res.json();
+
+      if (data.success && data.user) {
+        setUser(data.user);
+        localStorage.setItem('slp_user', JSON.stringify(data.user));
+        setView('chat');
+      } else {
+        setAuthMessage(data.message || 'Login failed.');
+      }
+    } catch (error) {
+      console.error('Login error:', error);
+>>>>>>> eaffcb4e7892a08afee9778f4ea3ff374522b3b6
       setAuthMessage('Connection error.');
     }
   };
 
   const handleClearChat = () => {
+<<<<<<< HEAD
     setMessages([]);
+=======
+    if (window.confirm('Clear all messages? This will also reset your token usage.')) {
+      setMessages([]);
+      setQuotaError(false);
+    }
+>>>>>>> eaffcb4e7892a08afee9778f4ea3ff374522b3b6
   };
 
   const handleRegister = async (e: FormEvent) => {
     e.preventDefault();
     setAuthMessage('');
     try {
+<<<<<<< HEAD
       const res = await fetch('/api/auth/register', {
+=======
+      const res = await fetch('/api/auth', {
+>>>>>>> eaffcb4e7892a08afee9778f4ea3ff374522b3b6
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: authEmail, password: authPassword })
@@ -145,12 +246,29 @@ export default function App() {
     setAdminUsers(data);
   };
 
+<<<<<<< HEAD
   const approveUser = async (userId: any, role: string) => {
     try {
       const res = await fetch('/api/admin/approve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, role })
+=======
+  useEffect(() => {
+    fetchAdminUsers();
+  }, []);
+
+  const approveUser = async (userId: number, role: string) => {
+    try {
+      const res = await fetch('/api/admin/update-role', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          role,
+          status: "approved"
+        })
+>>>>>>> eaffcb4e7892a08afee9778f4ea3ff374522b3b6
       });
       const data = await res.json();
       if (!data.success) {
@@ -166,7 +284,11 @@ export default function App() {
   const handleAddUser = async (e: FormEvent) => {
     e.preventDefault();
     try {
+<<<<<<< HEAD
       const res = await fetch('/api/admin/users/add', {
+=======
+      const res = await fetch('/api/admin/create', {
+>>>>>>> eaffcb4e7892a08afee9778f4ea3ff374522b3b6
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: newUserEmail, password: newUserPassword, role: newUserRole })
@@ -189,7 +311,11 @@ export default function App() {
     e.preventDefault();
     if (!editingAdminUser) return;
     try {
+<<<<<<< HEAD
       const res = await fetch('/api/admin/users/update', {
+=======
+      const res = await fetch('/api/admin/update-role', {
+>>>>>>> eaffcb4e7892a08afee9778f4ea3ff374522b3b6
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: editingAdminUser.id, role: editingAdminUser.role })
@@ -206,6 +332,7 @@ export default function App() {
     }
   };
 
+<<<<<<< HEAD
   const rejectUser = async (userId: any) => {
     console.log('[FRONTEND] Rejecting user with ID:', userId);
     try {
@@ -221,6 +348,29 @@ export default function App() {
       fetchAdminUsers();
     } catch (e: any) {
       console.error('Rejection error:', e);
+=======
+  const rejectUser = async (userId: number) => {
+    if (window.confirm('Are you sure you want to reject/delete this user?')) {
+      try {
+        const res = await fetch('/api/admin/delete-user', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId })
+        });
+
+        const data = await res.json();
+
+        if (!data.success) {
+          alert('Failed to reject user: ' + data.message);
+        }
+
+        fetchAdminUsers();
+
+      } catch (e) {
+        console.error('Rejection error:', e);
+        alert('Connection error while rejecting user.');
+      }
+>>>>>>> eaffcb4e7892a08afee9778f4ea3ff374522b3b6
     }
   };
 
@@ -230,6 +380,7 @@ export default function App() {
     setKnowledgeBase(data);
   };
 
+<<<<<<< HEAD
   const deleteFile = async (id: any) => {
     try {
       const res = await fetch(`/api/files/${id}`, { method: 'DELETE' });
@@ -240,6 +391,28 @@ export default function App() {
     } catch (e) {
       console.error('Delete file error:', e);
     }
+=======
+  const deleteFile = async (id: number) => {
+    const confirmDelete = window.confirm(
+      "Are you sure you want to delete this document?"
+    );
+
+    if (!confirmDelete) return;
+
+    const res = await fetch(`/api/files?id=${id}`, {
+      method: "DELETE"
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      alert("Delete failed");
+      console.error(data);
+      return;
+    }
+
+    fetchKnowledgeBase();
+>>>>>>> eaffcb4e7892a08afee9778f4ea3ff374522b3b6
   };
 
   const updateFile = async (e: FormEvent) => {
@@ -247,18 +420,87 @@ export default function App() {
     await fetch(`/api/files/${editingFile.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
+<<<<<<< HEAD
       body: JSON.stringify({ 
         name: editingFile.name, 
         category: editingFile.category,
         content: editingFile.content 
       })
+=======
+      body: JSON.stringify({ name: editingFile.name, category: editingFile.category })
+>>>>>>> eaffcb4e7892a08afee9778f4ea3ff374522b3b6
     });
     setEditingFile(null);
     fetchKnowledgeBase();
   };
 
+<<<<<<< HEAD
 
 
+=======
+  const handleConnectDrive = () => {
+    window.open(
+      "https://drive.google.com/drive/folders/1gD2-yPxfUVazMp3jycUxBnHvLtGt7jy_",
+      "_blank"
+    );
+  };
+
+  const handleSyncDrive = async () => {
+    alert("Google Drive sync is disabled.");
+  };
+
+  const handleFetchOAuthDebug = async () => {
+    try {
+      const res = await fetch('/api/auth/google/debug');
+      const data = await res.json();
+      setOAuthDebugInfo(data);
+      setShowOAuthDebug(true);
+    } catch (err) {
+      alert("Failed to fetch OAuth debug info.");
+    }
+  };
+
+  useEffect(() => {
+    const checkDriveStatus = async () => {
+      try {
+        const res = await fetch('/api/drive/status');
+        const data = await res.json();
+        setIsDriveConnected(data.connected);
+      } catch (e) {
+        console.error('Failed to check drive status:', e);
+      }
+    };
+    const checkDbHealth = async () => {
+      try {
+        const res = await fetch('/api/health');
+        const data = await res.json();
+        setDbStatus(data);
+      } catch (e) {
+        setDbStatus({ status: 'error', message: 'Could not connect to backend.' });
+      }
+    };
+    const cleanupFiles = async () => {
+      try {
+        await fetch('/api/cleanup', { method: 'POST' });
+      } catch (e) {
+        console.error('Cleanup failed:', e);
+      }
+    };
+    checkDbHealth();
+    cleanupFiles();
+  }, []);
+
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'GOOGLE_AUTH_SUCCESS') {
+        setIsDriveConnected(true);
+        fetchKnowledgeBase();
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
+>>>>>>> eaffcb4e7892a08afee9778f4ea3ff374522b3b6
 
   useEffect(() => {
     if (view === 'admin') fetchAdminUsers();
@@ -270,7 +512,11 @@ export default function App() {
       const arrayBuffer = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
       let fullText = '';
+<<<<<<< HEAD
       
+=======
+
+>>>>>>> eaffcb4e7892a08afee9778f4ea3ff374522b3b6
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const textContent = await page.getTextContent();
@@ -302,13 +548,21 @@ export default function App() {
       const arrayBuffer = await file.arrayBuffer();
       const workbook = XLSX.read(arrayBuffer);
       let fullText = '';
+<<<<<<< HEAD
       
+=======
+
+>>>>>>> eaffcb4e7892a08afee9778f4ea3ff374522b3b6
       workbook.SheetNames.forEach(sheetName => {
         const sheet = workbook.Sheets[sheetName];
         const csv = XLSX.utils.sheet_to_csv(sheet);
         fullText += `--- Sheet: ${sheetName} ---\n${csv}\n\n`;
       });
+<<<<<<< HEAD
       
+=======
+
+>>>>>>> eaffcb4e7892a08afee9778f4ea3ff374522b3b6
       return fullText;
     } catch (error) {
       console.error('Error extracting Excel text:', error);
@@ -323,6 +577,7 @@ export default function App() {
       const filesArray = Array.from(selectedFiles);
       const targetCategory = overrideCategory || selectedCategory;
       let processedCount = 0;
+<<<<<<< HEAD
       
       try {
         for (const file of filesArray) {
@@ -377,6 +632,71 @@ export default function App() {
                 console.error(`Error processing file ${file.name}:`, fileError);
                 alert(`Failed to upload ${file.name}: Error processing file.`);
             }
+=======
+
+      try {
+        for (const file of filesArray) {
+          let content = '';
+          const isText = file.type.startsWith('text/') ||
+            file.type === 'application/json' ||
+            file.name.endsWith('.txt') ||
+            file.name.endsWith('.md') ||
+            file.name.endsWith('.csv');
+          const isPDF = file.type === 'application/pdf' || file.name.endsWith('.pdf');
+          const isDocx = file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || file.name.endsWith('.docx');
+          const isExcel = file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+            file.type === 'application/vnd.ms-excel' ||
+            file.name.endsWith('.xlsx') ||
+            file.name.endsWith('.xls');
+          const isImage = file.type.startsWith('image/');
+
+          try {
+            if (isPDF) {
+              content = await extractTextFromPDF(file);
+            } else if (isDocx) {
+              content = await extractTextFromDocx(file);
+            } else if (isExcel) {
+              content = await extractTextFromExcel(file);
+            } else if (isImage) {
+              if (processedCount > 0 && processedCount % 5 === 0) {
+                await new Promise(r => setTimeout(r, 2000));
+              }
+              content = await analyzeImage(file, customApiKey);
+              processedCount++;
+            } else if (isText) {
+              const reader = new FileReader();
+              content = await new Promise<string>((resolve) => {
+                reader.onload = () => resolve(reader.result as string);
+                reader.readAsText(file);
+              });
+            } else {
+              content = `[Binary File: ${file.type || 'unknown type'}]`;
+            }
+
+            await fetch('/api/files', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                name: file.name,
+                category: targetCategory,
+                content: content,
+                type: file.type,
+                apiKey: customApiKey
+              })
+            });
+
+            await new Promise(r => setTimeout(r, 100));
+          } catch (fileError: any) {
+            console.error(`Error processing file ${file.name}:`, fileError);
+            const errorMsg = fileError.message?.includes('429')
+              ? 'Quota exceeded. Please wait a moment and try again.'
+              : 'Error processing file.';
+            alert(`Failed to upload ${file.name}: ${errorMsg}`);
+            if (fileError.message?.includes('429')) {
+              await new Promise(r => setTimeout(r, 5000));
+            }
+          }
+>>>>>>> eaffcb4e7892a08afee9778f4ea3ff374522b3b6
         }
         fetchKnowledgeBase();
       } catch (globalError) {
@@ -396,12 +716,27 @@ export default function App() {
     const currentInput = input;
     setInput('');
     setIsLoading(true);
+<<<<<<< HEAD
     
     // Trigger cleanup on message send as well
     fetch('/api/files/cleanup', { method: 'POST' }).catch(() => {});
 
     try {
       const response = await generateContent(currentInput, [], knowledgeBase, messages);
+=======
+
+    fetch('/api/cleanup', { method: 'POST' }).catch(() => {});
+
+    const isQuotaError = (err: any) => {
+      const errStr = JSON.stringify(err).toUpperCase();
+      const msgStr = (err.message || '').toUpperCase();
+      return errStr.includes('429') || errStr.includes('RESOURCE_EXHAUSTED') || msgStr.includes('429') || msgStr.includes('RESOURCE_EXHAUSTED');
+    };
+
+    try {
+      const response = await generateContent(currentInput, [], knowledgeBase, customApiKey, messages);
+      setQuotaError(false);
+>>>>>>> eaffcb4e7892a08afee9778f4ea3ff374522b3b6
       const modelResponse: Message = {
         role: 'model',
         text: response.text,
@@ -411,9 +746,26 @@ export default function App() {
       setMessages(prev => [...prev, modelResponse]);
     } catch (error: any) {
       console.error("Error generating content:", error);
+<<<<<<< HEAD
       const errorResponse: Message = {
         role: 'model',
         text: `Error: ${error.message || 'Something went wrong.'}`,
+=======
+      let errorMessage = `Error: ${error.message || 'Something went wrong.'}`;
+
+      if (isQuotaError(error)) {
+        setQuotaError(true);
+        if (customApiKey) {
+          errorMessage = "⚠️ **Your API Quota Exhausted**: Your private key has reached its temporary limit (15 requests/min). Please wait 60 seconds and try again.";
+        } else {
+          errorMessage = "⚠️ **Shared Quota Exhausted**: The shared AI limit has been reached. \n\nTo fix this permanently and for free, please paste your own API key in the sidebar. [Get a free key here](https://aistudio.google.com/app/apikey).";
+        }
+      }
+
+      const errorResponse: Message = {
+        role: 'model',
+        text: errorMessage,
+>>>>>>> eaffcb4e7892a08afee9778f4ea3ff374522b3b6
       };
       setMessages(prev => [...prev, errorResponse]);
     } finally {
@@ -421,8 +773,29 @@ export default function App() {
     }
   };
 
+<<<<<<< HEAD
 
 
+=======
+  const handleRetry = () => {
+    if (retryCooldown > 0) return;
+
+    const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
+    if (lastUserMsg) {
+      setInput(lastUserMsg.text);
+      setRetryCooldown(5);
+      setMessages(prev => {
+        const last = prev[prev.length - 1];
+        if (last && last.role === 'model' && (last.text.includes('Error') || last.text.includes('Quota'))) {
+          return prev.slice(0, -1);
+        }
+        return prev;
+      });
+    }
+  };
+
+  // Render based on view
+>>>>>>> eaffcb4e7892a08afee9778f4ea3ff374522b3b6
   if (view === 'login' || view === 'register') {
     return (
       <div className="min-h-screen bg-emerald-50 flex items-center justify-center p-4">
@@ -441,6 +814,7 @@ export default function App() {
               </div>
             )}
           </div>
+<<<<<<< HEAD
           
           <form onSubmit={view === 'login' ? handleLogin : handleRegister} className="space-y-4">
             <div>
@@ -448,6 +822,15 @@ export default function App() {
               <input 
                 type="email" 
                 required 
+=======
+
+          <form onSubmit={view === 'login' ? handleLogin : handleRegister} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
+              <input
+                type="email"
+                required
+>>>>>>> eaffcb4e7892a08afee9778f4ea3ff374522b3b6
                 className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none transition"
                 value={authEmail}
                 onChange={(e) => setAuthEmail(e.target.value)}
@@ -455,9 +838,15 @@ export default function App() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+<<<<<<< HEAD
               <input 
                 type="password" 
                 required 
+=======
+              <input
+                type="password"
+                required
+>>>>>>> eaffcb4e7892a08afee9778f4ea3ff374522b3b6
                 className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none transition"
                 value={authPassword}
                 onChange={(e) => setAuthPassword(e.target.value)}
@@ -468,9 +857,15 @@ export default function App() {
               {view === 'login' ? 'Sign In' : 'Register'}
             </button>
           </form>
+<<<<<<< HEAD
           
           <div className="mt-6 text-center">
             <button 
+=======
+
+          <div className="mt-6 text-center">
+            <button
+>>>>>>> eaffcb4e7892a08afee9778f4ea3ff374522b3b6
               onClick={() => { setView(view === 'login' ? 'register' : 'login'); setAuthMessage(''); }}
               className="text-emerald-600 text-sm font-medium hover:underline"
             >
@@ -492,6 +887,7 @@ export default function App() {
               <p className="text-gray-500">Manage user access and approvals</p>
             </div>
             <div className="flex gap-3">
+<<<<<<< HEAD
               <button 
                 onClick={fetchAdminUsers}
                 className="p-2 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition"
@@ -501,6 +897,10 @@ export default function App() {
               </button>
               <button 
                 onClick={() => setIsAddingUser(true)} 
+=======
+              <button
+                onClick={() => setIsAddingUser(true)}
+>>>>>>> eaffcb4e7892a08afee9778f4ea3ff374522b3b6
                 className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition font-bold shadow-lg shadow-emerald-100"
               >
                 <UserPlus className="w-4 h-4" /> Add User
@@ -511,6 +911,7 @@ export default function App() {
             </div>
           </div>
           <div className="p-8">
+<<<<<<< HEAD
             <div className="space-y-6">
               {/* Database Health Check */}
               <div className="p-6 bg-gray-50 rounded-2xl border border-gray-100 mb-8">
@@ -659,6 +1060,63 @@ export default function App() {
                   ))}
                 </div>
               </div>
+=======
+            <div className="space-y-4">
+              {adminUsers.length === 0 && <p className="text-gray-500 text-center py-8">No users found.</p>}
+              {adminUsers.map(u => (
+                <div key={u.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                  <div>
+                    <p className="font-semibold text-gray-900">{u.email}</p>
+                    <div className="flex gap-2 items-center">
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${u.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+                        {u.role}
+                      </span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${u.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                        {u.status}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    {u.status === 'pending' && (
+                      <div className="flex items-center gap-2">
+                        <select
+                          id={`role-${u.id}`}
+                          className="text-xs p-2 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          defaultValue="user"
+                        >
+                          <option value="user">User</option>
+                          <option value="admin">Admin</option>
+                        </select>
+                        <button
+                          onClick={() => {
+                            const roleSelect = document.getElementById(`role-${u.id}`) as HTMLSelectElement;
+                            approveUser(u.id, roleSelect.value);
+                          }}
+                          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition text-sm font-bold"
+                        >
+                          <CheckCircle className="w-4 h-4" /> Approve
+                        </button>
+                      </div>
+                    )}
+                    <div className="flex gap-2 items-center">
+                      <button
+                        onClick={() => setEditingAdminUser(u)}
+                        className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition"
+                        title="Edit User Role"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => rejectUser(u.id)}
+                        className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition text-sm font-bold"
+                      >
+                        <X className="w-4 h-4" /> {u.status === 'pending' ? 'Reject' : 'Delete'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+>>>>>>> eaffcb4e7892a08afee9778f4ea3ff374522b3b6
             </div>
           </div>
         </div>
@@ -671,9 +1129,15 @@ export default function App() {
               <form onSubmit={handleAddUser} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
+<<<<<<< HEAD
                   <input 
                     type="email" 
                     required 
+=======
+                  <input
+                    type="email"
+                    required
+>>>>>>> eaffcb4e7892a08afee9778f4ea3ff374522b3b6
                     className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                     value={newUserEmail}
                     onChange={(e) => setNewUserEmail(e.target.value)}
@@ -681,9 +1145,15 @@ export default function App() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+<<<<<<< HEAD
                   <input 
                     type="password" 
                     required 
+=======
+                  <input
+                    type="password"
+                    required
+>>>>>>> eaffcb4e7892a08afee9778f4ea3ff374522b3b6
                     className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                     value={newUserPassword}
                     onChange={(e) => setNewUserPassword(e.target.value)}
@@ -691,7 +1161,11 @@ export default function App() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+<<<<<<< HEAD
                   <select 
+=======
+                  <select
+>>>>>>> eaffcb4e7892a08afee9778f4ea3ff374522b3b6
                     className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                     value={newUserRole}
                     onChange={(e) => setNewUserRole(e.target.value as any)}
@@ -722,7 +1196,11 @@ export default function App() {
               <form onSubmit={handleUpdateUserRole} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+<<<<<<< HEAD
                   <select 
+=======
+                  <select
+>>>>>>> eaffcb4e7892a08afee9778f4ea3ff374522b3b6
                     className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                     value={editingAdminUser.role}
                     onChange={(e) => setEditingAdminUser({ ...editingAdminUser, role: e.target.value })}
@@ -747,6 +1225,7 @@ export default function App() {
     );
   }
 
+<<<<<<< HEAD
   return (
     <div className="h-screen w-screen bg-emerald-50 flex antialiased overflow-hidden relative">
       {/* Mobile Sidebar Toggle */}
@@ -1168,3 +1647,10 @@ export default function App() {
     </div>
   );
 }
+=======
+  // Chat view
+  return <SLPChat />;
+}
+
+export default App;
+>>>>>>> eaffcb4e7892a08afee9778f4ea3ff374522b3b6
