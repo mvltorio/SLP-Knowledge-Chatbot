@@ -68,7 +68,9 @@ export default async function handler(req: any, res: any) {
         .from("users")
         .select("email, role, status")
         .eq("id", authData.user.id)
-        .single();
+        .maybeSingle();
+        console.log("AUTH DATA:", authData);
+console.log("SIGNIN ERROR:", signInError);
 
       if (userError || !userData) {
         return res.status(403).json({
