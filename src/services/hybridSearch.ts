@@ -12,11 +12,14 @@ export default class HybridSearchService {
     this.apiKey = apiKey
   }
 
+  // Initialize Pagefind
   async initPagefind() {
+
     try {
 
       this.pagefind = await import(
-        /* @vite-ignore */ "/pagefind/pagefind.js"
+        /* @vite-ignore */
+        "/pagefind/pagefind.js"
       )
 
       console.log("✅ Pagefind loaded")
@@ -26,39 +29,53 @@ export default class HybridSearchService {
       console.error("❌ Failed loading Pagefind", err)
 
     }
+
   }
 
-  // Retrieve multiple documents from Pagefind
+  // Retrieve documents from Pagefind
   async searchDocuments(query: string) {
 
-    if (!this.pagefind) return []
-
-    const search = await this.pagefind.search(query)
-
-    if (!search.results.length) {
+    if (!this.pagefind) {
+      console.warn("Pagefind not initialized")
       return []
     }
 
-    const results = await Promise.all(
-      search.results.slice(0, 6).map((r: any) => r.data())
-    )
+    try {
 
-    return results.map((r: any) => ({
-      fileName: r.meta?.title || "Document",
-      category: r.meta?.category || "General",
-      content: r.content,
-      excerpt: r.excerpt
-    }))
+      const search = await this.pagefind.search(query)
+
+      if (!search.results.length) {
+        return []
+      }
+
+      const results = await Promise.all(
+        search.results.slice(0, 6).map((r: any) => r.data())
+      )
+
+      return results.map((r: any) => ({
+        fileName: r.meta?.title || "Document",
+        category: r.meta?.category || "General",
+        excerpt: r.excerpt,
+        content: r.content
+      }))
+
+    } catch (error) {
+
+      console.error("Pagefind search error:", error)
+      return []
+
+    }
+
   }
 
-  // Ask Groq using retrieved documents
+  // Ask Groq AI using retrieved documents
   async askGroq(question: string, docs: any[]) {
 
     if (!docs.length) {
       return "I could not find relevant information in the SLP documents."
     }
 
-    // Build structured context from multiple sources
+    // Build multi-document context
     const context = docs
       .map((doc, i) => `
 SOURCE ${i + 1}: ${doc.fileName}
@@ -71,12 +88,12 @@ ${doc.content}
     const prompt = `
 You are an expert assistant for the Sustainable Livelihood Program (SLP).
 
-Your task is to answer the user's question using ONLY the provided SLP documents.
+Answer the user's question using ONLY the provided SLP documents.
 
-Important rules:
-- You may combine information from multiple documents.
-- If several sources contain related information, merge them into one clear explanation.
-- If the documents do not contain the answer, say:
+Rules:
+- You may combine information from multiple sources.
+- Provide a clear explanation.
+- If the answer cannot be found in the documents, say:
   "The information is not available in the SLP documents."
 
 DOCUMENTS:
@@ -85,7 +102,7 @@ ${context}
 QUESTION:
 ${question}
 
-Provide a clear and helpful answer based on the documents.
+Answer:
 `
 
     try {
@@ -117,19 +134,25 @@ Provide a clear and helpful answer based on the documents.
 
       const data = await response.json()
 
-      return data.choices?.[0]?.message?.content || "No answer."
+      console.log("Groq response:", data)
+
+      if (!data || !data.choices || !data.choices.length) {
+        return "⚠️ AI model returned no response."
+      }
+
+      return data.choices[0].message.content
 
     } catch (error) {
 
       console.error("Groq request failed:", error)
 
-      return "⚠️ Unable to generate answer from the AI model."
+      return "⚠️ Failed to generate AI response."
 
     }
 
   }
 
-  // Main hybrid search pipeline
+  // Main Hybrid RAG pipeline
   async search(query: string): Promise<HybridSearchResponse> {
 
     const docs = await this.searchDocuments(query)
@@ -140,6 +163,7 @@ Provide a clear and helpful answer based on the documents.
       answer,
       sources: docs
     }
+
   }
 
 }
