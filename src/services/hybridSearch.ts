@@ -19,70 +19,117 @@ export default class HybridSearchService {
         /* @vite-ignore */ "/pagefind/pagefind.js"
       )
 
-      console.log("Pagefind loaded")
+      console.log("✅ Pagefind loaded")
 
     } catch (err) {
 
-      console.error("Failed loading Pagefind", err)
+      console.error("❌ Failed loading Pagefind", err)
 
     }
   }
 
+  // Retrieve multiple documents from Pagefind
   async searchDocuments(query: string) {
 
     if (!this.pagefind) return []
 
     const search = await this.pagefind.search(query)
 
+    if (!search.results.length) {
+      return []
+    }
+
     const results = await Promise.all(
-      search.results.slice(0, 5).map((r: any) => r.data())
+      search.results.slice(0, 6).map((r: any) => r.data())
     )
 
     return results.map((r: any) => ({
-      title: r.meta?.title || "Document",
+      fileName: r.meta?.title || "Document",
       category: r.meta?.category || "General",
       content: r.content,
       excerpt: r.excerpt
     }))
   }
 
+  // Ask Groq using retrieved documents
   async askGroq(question: string, docs: any[]) {
 
-    const context = docs.map(d => d.content).join("\n\n")
+    if (!docs.length) {
+      return "I could not find relevant information in the SLP documents."
+    }
+
+    // Build structured context from multiple sources
+    const context = docs
+      .map((doc, i) => `
+SOURCE ${i + 1}: ${doc.fileName}
+CATEGORY: ${doc.category}
+
+${doc.content}
+`)
+      .join("\n\n")
 
     const prompt = `
-Use ONLY the provided SLP documents.
+You are an expert assistant for the Sustainable Livelihood Program (SLP).
 
-Documents:
+Your task is to answer the user's question using ONLY the provided SLP documents.
+
+Important rules:
+- You may combine information from multiple documents.
+- If several sources contain related information, merge them into one clear explanation.
+- If the documents do not contain the answer, say:
+  "The information is not available in the SLP documents."
+
+DOCUMENTS:
 ${context}
 
-Question:
+QUESTION:
 ${question}
+
+Provide a clear and helpful answer based on the documents.
 `
 
-    const response = await fetch(
-      "https://api.groq.com/openai/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${this.apiKey}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          model: "llama3-70b-8192",
-          messages: [
-            { role: "user", content: prompt }
-          ],
-          temperature: 0.2
-        })
-      }
-    )
+    try {
 
-    const data = await response.json()
+      const response = await fetch(
+        "https://api.groq.com/openai/v1/chat/completions",
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${this.apiKey}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            model: "llama3-70b-8192",
+            messages: [
+              {
+                role: "system",
+                content: "You are a knowledgeable assistant for SLP program documents."
+              },
+              {
+                role: "user",
+                content: prompt
+              }
+            ],
+            temperature: 0.2
+          })
+        }
+      )
 
-    return data.choices?.[0]?.message?.content || "No answer."
+      const data = await response.json()
+
+      return data.choices?.[0]?.message?.content || "No answer."
+
+    } catch (error) {
+
+      console.error("Groq request failed:", error)
+
+      return "⚠️ Unable to generate answer from the AI model."
+
+    }
+
   }
 
+  // Main hybrid search pipeline
   async search(query: string): Promise<HybridSearchResponse> {
 
     const docs = await this.searchDocuments(query)
