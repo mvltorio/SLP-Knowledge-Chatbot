@@ -1,7 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 
 export default async function handler(req: any, res: any) {
-
   // Enable CORS
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -19,16 +18,11 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-
     // Safely parse body (important for Vercel)
-    const body =
-      typeof req.body === "string"
-        ? JSON.parse(req.body)
-        : req.body || {};
-
+    const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
     const { email, password } = body;
 
-    console.log("LOGIN REQUEST:", body);
+    console.log("Login attempt for email:", email);
 
     if (!email || !password) {
       return res.status(400).json({
@@ -46,96 +40,111 @@ export default async function handler(req: any, res: any) {
       console.error("Missing Supabase environment variables");
       return res.status(500).json({
         success: false,
-        message: "Server configuration error",
+        message: "Server configuration error - missing environment variables",
       });
     }
 
-    // Client for login
+    // Create Supabase clients
     const supabase = createClient(supabaseUrl, anonKey);
+    const adminSupabase = createClient(supabaseUrl, serviceKey);
 
-    const { data: authData, error: signInError } =
-      await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+    // Attempt to sign in
+    const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
 
-    console.log("SIGNIN ERROR:", signInError);
-
-    // LOGIN SUCCESS
+    // If sign in successful
     if (!signInError && authData?.user) {
+      try {
+        // Get user profile from database
+        const { data: userData, error: userError } = await adminSupabase
+          .from("users")
+          .select("email, role, status")
+          .eq("id", authData.user.id)
+          .maybeSingle();
 
-      const { data: userData, error: userError } = await supabase
-        .from("users")
-        .select("email, role, status")
-        .eq("id", authData.user.id)
-        .maybeSingle();
-        console.log("AUTH DATA:", authData);
-console.log("SIGNIN ERROR:", signInError);
+        if (userError) {
+          console.error("Error fetching user profile:", userError);
+          return res.status(500).json({
+            success: false,
+            message: "Error fetching user profile",
+          });
+        }
 
-      if (userError || !userData) {
-        return res.status(403).json({
+        if (!userData) {
+          return res.status(403).json({
+            success: false,
+            message: "User profile not found in database",
+          });
+        }
+
+        if (userData.status !== "approved") {
+          return res.status(403).json({
+            success: false,
+            message: "Account not approved by admin. Please wait for approval.",
+          });
+        }
+
+        return res.status(200).json({
+          success: true,
+          user: {
+            email: userData.email,
+            role: userData.role,
+            status: userData.status,
+          },
+        });
+      } catch (profileError) {
+        console.error("Error processing user profile:", profileError);
+        return res.status(500).json({
           success: false,
-          message: "User profile not found",
+          message: "Error processing user profile",
         });
       }
-
-      if (userData.status !== "approved") {
-        return res.status(403).json({
-          success: false,
-          message: "Account not approved by admin.",
-        });
-      }
-
-      return res.status(200).json({
-        success: true,
-        user: {
-          email: userData.email,
-          role: userData.role,
-          status: userData.status,
-        },
-      });
     }
 
-    // If login failed due to invalid credentials -> REGISTER
+    // If login failed due to invalid credentials, try to register
     if (signInError?.message === "Invalid login credentials") {
+      try {
+        // Check if user exists in database
+        const { data: existingUser, error: checkError } = await adminSupabase
+          .from("users")
+          .select("email")
+          .eq("email", email)
+          .maybeSingle();
 
-      const adminSupabase = createClient(supabaseUrl, serviceKey);
+        if (checkError) {
+          console.error("Error checking existing user:", checkError);
+          return res.status(500).json({
+            success: false,
+            message: "Error checking user existence",
+          });
+        }
 
-      // Check existing user
-      const { data: existingUser } = await adminSupabase
-        .from("users")
-        .select("email")
-        .eq("email", email)
-        .maybeSingle();
+        if (existingUser) {
+          return res.status(400).json({
+            success: false,
+            message: "User already exists. Please check your password or contact admin.",
+          });
+        }
 
-      if (existingUser) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "User already exists but login failed. Check your password.",
-        });
-      }
-
-      // Create auth user
-      const { data: newUser, error: createError } =
-        await adminSupabase.auth.admin.createUser({
+        // Create auth user
+        const { data: newUser, error: createError } = await adminSupabase.auth.admin.createUser({
           email,
           password,
           email_confirm: true,
         });
 
-      if (createError || !newUser?.user) {
-        console.error("Create user error:", createError);
-        return res.status(400).json({
-          success: false,
-          message: createError?.message || "Registration failed",
-        });
-      }
+        if (createError || !newUser?.user) {
+          console.error("Create user error:", createError);
+          return res.status(400).json({
+            success: false,
+            message: createError?.message || "Registration failed",
+          });
+        }
 
-      // Insert profile
-      const { error: insertError } = await adminSupabase
-        .from("users")
-        .insert({
+        // Insert profile
+        const { error: insertError } = await adminSupabase.from("users").insert({
           id: newUser.user.id,
           email,
           role: "user",
@@ -143,39 +152,42 @@ console.log("SIGNIN ERROR:", signInError);
           created_at: new Date().toISOString(),
         });
 
-      if (insertError) {
+        if (insertError) {
+          console.error("Insert error:", insertError);
 
-        console.error("Insert error:", insertError);
+          // Rollback - delete the auth user
+          try {
+            await adminSupabase.auth.admin.deleteUser(newUser.user.id);
+          } catch (e) {
+            console.error("Rollback failed:", e);
+          }
 
-        // rollback
-        try {
-          await adminSupabase.auth.admin.deleteUser(newUser.user.id);
-        } catch (e) {
-          console.error("Rollback failed:", e);
+          return res.status(500).json({
+            success: false,
+            message: "Failed to create user profile",
+          });
         }
 
+        return res.status(200).json({
+          success: true,
+          message: "Registration successful! Waiting for admin approval.",
+        });
+      } catch (regError) {
+        console.error("Registration error:", regError);
         return res.status(500).json({
           success: false,
-          message: "Failed to create user profile",
+          message: "Registration failed due to server error",
         });
       }
-
-      return res.status(200).json({
-        success: true,
-        message:
-          "Registration successful! Waiting for admin approval.",
-      });
     }
 
+    // Handle other auth errors
     return res.status(401).json({
       success: false,
       message: signInError?.message || "Authentication failed",
     });
-
   } catch (err: any) {
-
     console.error("AUTH API ERROR:", err);
-
     return res.status(500).json({
       success: false,
       message: err?.message || "Internal server error",
