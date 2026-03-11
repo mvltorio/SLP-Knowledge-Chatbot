@@ -136,23 +136,34 @@ const res = await fetch("/api/auth", {
     }
   };
 
-  const handleRegister = async (e: FormEvent) => {
-    e.preventDefault();
-    setAuthMessage('');
-    try {
-      const res = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: authEmail, password: authPassword })
-      });
-      const data = await res.json();
-      setAuthMessage(data.message);
-      if (data.success) setView('login');
-    } catch (e) {
-      setAuthMessage('Connection error. Please check your database configuration.');
-    }
-  };
+const handleRegister = async (e: FormEvent) => {
+  e.preventDefault();
+  setAuthMessage('');
 
+  try {
+
+    const res = await fetch('/api/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: "register",
+        email: authEmail,
+        password: authPassword
+      })
+    });
+
+    const data = await res.json();
+
+    setAuthMessage(data.message);
+
+    if (data.success) {
+      setView('login');
+    }
+
+  } catch (e) {
+    setAuthMessage('Connection error. Please check your database configuration.');
+  }
+};
   const handleClearChat = () => {
     setMessages([]);
   };
