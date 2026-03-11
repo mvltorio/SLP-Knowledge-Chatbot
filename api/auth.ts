@@ -2,6 +2,14 @@ import { createClient } from "@supabase/supabase-js";
 
 export default async function handler(req: any, res: any) {
 
+  // Allow GET so /api/auth doesn't crash in browser
+  if (req.method === "GET") {
+    return res.status(200).json({
+      status: "Auth API working"
+    });
+  }
+
+  // Only POST allowed for login/register
   if (req.method !== "POST") {
     return res.status(405).json({ message: "Method not allowed" });
   }
