@@ -1,0 +1,5 @@
+{
+  "name": "SLP Knowledge Chatbot",
+  "description": "A chatbot that can be trained on uploaded documents, photos, and videos to answer questions, generate templates, and create reports.",
+  "requestFramePermissions": []
+}
