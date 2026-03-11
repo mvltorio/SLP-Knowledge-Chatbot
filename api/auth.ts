@@ -1,63 +1,69 @@
 import { createClient } from "@supabase/supabase-js";
 
 export default async function handler(req: any, res: any) {
-  // Enable CORS
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  // Handle preflight requests
-  if (req.method === 'OPTIONS') {
+  // Enable CORS
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  if (req.method === "OPTIONS") {
     return res.status(200).end();
   }
 
-  // Only allow POST
   if (req.method !== "POST") {
-    return res.status(405).json({ 
+    return res.status(405).json({
       success: false,
-      message: "Method not allowed" 
-    });
-  }
-
-  const body =
-  typeof req.body === "string"
-    ? JSON.parse(req.body)
-    : req.body || {};
-
-const { email, password } = body;
-
-  // Validate required fields
-  if (!email || !password) {
-    return res.status(400).json({
-      success: false,
-      message: "Email and password are required"
+      message: "Method not allowed",
     });
   }
 
   try {
-    // Check if environment variables exist
-    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      console.error('Missing environment variables');
-      return res.status(500).json({
+
+    // Safely parse body (important for Vercel)
+    const body =
+      typeof req.body === "string"
+        ? JSON.parse(req.body)
+        : req.body || {};
+
+    const { email, password } = body;
+
+    console.log("LOGIN REQUEST:", body);
+
+    if (!email || !password) {
+      return res.status(400).json({
         success: false,
-        message: "Server configuration error"
+        message: "Email and password are required",
       });
     }
 
-    // Try to login first
-    const supabase = createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_ANON_KEY
-    );
+    // Check environment variables
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const anonKey = process.env.SUPABASE_ANON_KEY;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-    const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    if (!supabaseUrl || !anonKey || !serviceKey) {
+      console.error("Missing Supabase environment variables");
+      return res.status(500).json({
+        success: false,
+        message: "Server configuration error",
+      });
+    }
 
-    // If sign in successful -> LOGIN
+    // Client for login
+    const supabase = createClient(supabaseUrl, anonKey);
+
+    const { data: authData, error: signInError } =
+      await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+    console.log("SIGNIN ERROR:", signInError);
+
+    // LOGIN SUCCESS
     if (!signInError && authData?.user) {
-      // Fetch user data from users table
+
       const { data: userData, error: userError } = await supabase
         .from("users")
         .select("email, role, status")
@@ -74,7 +80,7 @@ const { email, password } = body;
       if (userData.status !== "approved") {
         return res.status(403).json({
           success: false,
-          message: "Account not approved by admin. Please wait for approval.",
+          message: "Account not approved by admin.",
         });
       }
 
@@ -83,49 +89,48 @@ const { email, password } = body;
         user: {
           email: userData.email,
           role: userData.role,
-          status: userData.status
-        }
+          status: userData.status,
+        },
       });
     }
 
-    // If sign in failed with "Invalid login credentials", try to register
+    // If login failed due to invalid credentials -> REGISTER
     if (signInError?.message === "Invalid login credentials") {
-      // Use service role key for registration
-      const adminSupabase = createClient(
-        process.env.SUPABASE_URL,
-        process.env.SUPABASE_SERVICE_ROLE_KEY
-      );
 
-      // Check if user already exists in your users table
+      const adminSupabase = createClient(supabaseUrl, serviceKey);
+
+      // Check existing user
       const { data: existingUser } = await adminSupabase
         .from("users")
         .select("email")
         .eq("email", email)
-        .single();
+        .maybeSingle();
 
       if (existingUser) {
         return res.status(400).json({
           success: false,
-          message: "User with this email already exists but login failed. Please check your password."
+          message:
+            "User already exists but login failed. Check your password.",
         });
       }
 
-      // Create user with admin API
-      const { data: newUser, error: createError } = await adminSupabase.auth.admin.createUser({
-        email,
-        password,
-        email_confirm: true
-      });
+      // Create auth user
+      const { data: newUser, error: createError } =
+        await adminSupabase.auth.admin.createUser({
+          email,
+          password,
+          email_confirm: true,
+        });
 
       if (createError || !newUser?.user) {
-        console.error('Registration error:', createError);
+        console.error("Create user error:", createError);
         return res.status(400).json({
           success: false,
-          message: createError?.message || "Registration failed"
+          message: createError?.message || "Registration failed",
         });
       }
 
-      // Insert into users table
+      // Insert profile
       const { error: insertError } = await adminSupabase
         .from("users")
         .insert({
@@ -133,41 +138,45 @@ const { email, password } = body;
           email,
           role: "user",
           status: "pending",
-          created_at: new Date().toISOString()
+          created_at: new Date().toISOString(),
         });
 
       if (insertError) {
-        console.error('Insert error:', insertError);
-        // Try to rollback: delete the auth user if insert fails
+
+        console.error("Insert error:", insertError);
+
+        // rollback
         try {
           await adminSupabase.auth.admin.deleteUser(newUser.user.id);
         } catch (e) {
-          console.error('Rollback failed:', e);
+          console.error("Rollback failed:", e);
         }
-        
+
         return res.status(500).json({
           success: false,
-          message: "Failed to create user profile"
+          message: "Failed to create user profile",
         });
       }
 
       return res.status(200).json({
         success: true,
-        message: "Registration successful! Your account is pending admin approval."
+        message:
+          "Registration successful! Waiting for admin approval.",
       });
     }
 
-    // If it's some other error (wrong password, etc.)
     return res.status(401).json({
       success: false,
-      message: signInError?.message || "Authentication failed"
+      message: signInError?.message || "Authentication failed",
     });
 
   } catch (err: any) {
-    console.error('API Error:', err);
+
+    console.error("AUTH API ERROR:", err);
+
     return res.status(500).json({
       success: false,
-      message: err?.message || "Internal server error"
+      message: err?.message || "Internal server error",
     });
   }
 }
