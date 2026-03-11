@@ -21,11 +21,6 @@
       ]
     },
     "allowImportingTsExtensions": true,
-<<<<<<< HEAD
-    "noEmit": true
-  }
-}
-=======
     "noEmit": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
@@ -36,4 +31,3 @@
   "include": ["src"],
   "exclude": ["node_modules", "dist"]
 }
->>>>>>> eaffcb4e7892a08afee9778f4ea3ff374522b3b6
