@@ -1,51 +1,107 @@
 import { createClient } from "@supabase/supabase-js";
 
 export default async function handler(req: any, res: any) {
+
+  if (req.method !== "POST") {
+    return res.status(405).json({ message: "Method not allowed" });
+  }
+
+  const { email, password, action } = req.body;
+
+  const supabase = createClient(
+    process.env.SUPABASE_URL!,
+    process.env.SUPABASE_ANON_KEY!
+  );
+
   try {
-    if (req.method !== "POST") {
-      return res.status(405).json({ message: "Method not allowed" });
-    }
 
-    const body =
-      typeof req.body === "string"
-        ? JSON.parse(req.body)
-        : req.body || {};
+    // LOGIN
+    if (action === "login") {
 
-    const { email, password } = body;
-
-    console.log("BODY:", body);
-
-    const supabase = createClient(
-      process.env.SUPABASE_URL!,
-      process.env.SUPABASE_ANON_KEY!
-    );
-
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    console.log("LOGIN RESULT:", data);
-    console.log("LOGIN ERROR:", error);
-
-    if (error) {
-      return res.status(401).json({
-        success: false,
-        message: error.message,
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
       });
+
+      if (error) {
+        return res.status(401).json({
+          success: false,
+          message: error.message
+        });
+      }
+
+      const { data: user } = await supabase
+        .from("users")
+        .select("*")
+        .eq("email", email)
+        .maybeSingle();
+
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: "User record missing"
+        });
+      }
+
+      if (user.status !== "approved") {
+        return res.status(403).json({
+          success: false,
+          message: "Account pending admin approval"
+        });
+      }
+
+      return res.json({
+        success: true,
+        user
+      });
+
     }
 
-    return res.status(200).json({
-      success: true,
-      user: data.user,
-    });
+    // REGISTER
+    if (action === "register") {
 
-  } catch (err: any) {
-    console.error("SERVER ERROR:", err);
+      const admin = createClient(
+        process.env.SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+      );
+
+      const { data, error } = await admin.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true
+      });
+
+      if (error) {
+        return res.status(400).json({
+          success: false,
+          message: error.message
+        });
+      }
+
+      await admin.from("users").insert({
+        id: data.user.id,
+        email,
+        role: "user",
+        status: "pending"
+      });
+
+      return res.json({
+        success: true,
+        message: "Registration successful. Waiting for admin approval."
+      });
+
+    }
+
+    return res.status(400).json({ message: "Invalid action" });
+
+  } catch (e: any) {
+
+    console.error("AUTH ERROR:", e);
 
     return res.status(500).json({
       success: false,
-      message: err.message,
+      message: e.message
     });
+
   }
 }

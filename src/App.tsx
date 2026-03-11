@@ -115,11 +115,15 @@ export default function App() {
     e.preventDefault();
     setAuthMessage('');
     try {
-      const res = await fetch("/api/auth", {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: authEmail, password: authPassword })
-      });
+const res = await fetch("/api/auth", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    action: "login",
+    email: authEmail,
+    password: authPassword
+  })
+});
       const data = await res.json();
       if (data.success) {
         setUser(data.user);
